@@ -1,5 +1,7 @@
 # 第14章 2026年 AI Agent 就业市场分析
 
+> 本地源码基准：`27f1a836b5c04a30763dd91960059f81c05bf505`，版本0.4.1。本章的薪资/市场数字沿用原参考资料，未在本次源码修订中核实为当前事实。 核对范围见 [版本记录](../LOCAL_SOURCE_BASELINE.md)。
+
 > 🎯 本章定位：帮助求职者全面了解 2026 年 AI Agent 相关岗位的市场现状、薪资水平、技能要求和求职策略，制定针对性的求职规划。
 
 ---
@@ -431,7 +433,7 @@
 - 理解 ReAct 循环的原理和实现
 - 了解 Agent 的记忆系统（短期/长期/外部）
 - 理解工具调用机制（Tool Calling / Function Calling）
-- 至少读过一个 Agent 框架的核心源码（推荐 Nanobot，仅 4000 行）
+- 至少读过一个 Agent 框架的核心源码（推荐 Nanobot，仅 当前基准核心源码）
 - 了解多 Agent 协作模式（Orchestrator-Workers、Pipeline）
 
 **学习建议**：跟随 learn-nanobot 项目的章节逐步深入
@@ -687,5 +689,4 @@ Multi-Agent 编排, 端侧部署, 知识蒸馏,
 
 ---
 
-*上一章：[第13章 面试八股文](../13-interview-bagua/README.md)*
-*下一章：[第15章 简历模板](../15-resume-template/README.md)*
+*上一章：[第13章 面试八股文](../13-interview-bagua/README.md)* *下一章：[第15章 简历模板](../15-resume-template/README.md)*

@@ -1,0 +1,344 @@
+{
+  "commit": "27f1a836b5c04a30763dd91960059f81c05bf505",
+  "version": "0.4.1",
+  "sources": {
+    "nanobot/agent/loop.py": "266c2ca2afe94f1307058cd13ca1e76742dc454952659af4df1bda882dd1a68a",
+    "nanobot/agent/runner.py": "684118d2175de4dbc2dde098282e065b6dde559f475b203e0e8b345d13449b34",
+    "nanobot/bus/queue.py": "c97928f6bd67e43aa855a0d5e85d57d0070573d8500d5d90f2c6916f300c72db",
+    "nanobot/webui/outbound_delivery.py": "cf8af3312cd2bded41a46f9cd921fb28d0b2f8d91e7afec061a49af787f58899",
+    "nanobot/agent/context.py": "00dbc0d4d46a27bcb5dea989723f4ea3e457ce8b466e8ea161da09ce78d7dabf",
+    "nanobot/agent/memory.py": "13fd3686c1206e51a1de3107c03a08de8c891826b6695b8fc7dbabc40e90680e",
+    "nanobot/agent/tools/registry.py": "00fd78b7507fc7ca60e53bb415c6f2af4de84a83cfd940c58362ce2866487b73",
+    "nanobot/agent/hook.py": "f7d3ddbc76a93feb3382986148199518a29b513685094e82c7d07b52d278dec7",
+    "nanobot/agent/tools/mcp.py": "25c65d02e5f9fc605e5f47052a2a776ccb66059f45afd33dd9594079c0ff73c9",
+    "nanobot/bus/events.py": "2a954b8561292c4d48829f46ab90a4b0c080295c2830daaf6f3ce57d4c13f077",
+    "nanobot/providers/routing.py": "ee3b07ea36e7fd99101aeb8fb46eb4c5bca5a2a5ebabd5b359347dea77db7fe0",
+    "nanobot/session/state.py": "d840b48094da958c715f3c13e06531905aca5a76f7a081007c78715f2d3c646f",
+    "docs/memory.md": "9c5a7ce7740f321dbe54d87b633c704ea1ad036a1d1d1ba37b7bf7ceb4148f11",
+    "README.md": "39f178171b58c5e2f29587a206186e4209144f98e7145255fce9c0dcbdf413c6",
+    "pyproject.toml": "e988ce6d331798b147d4f8f575c163dd3ba04c23c43e02e589c68d6b79eba22f",
+    "docs/concepts.md": "5dc4ab139eab25507d052f0bad903d4719c98cab05862a43fb0bff7794a8bda5",
+    "docs/provider-cookbook.md": "19ffb7b32d9fd4f2f5367c64c2f8fe310c0b34037ec2fdfd7feb356571d05139",
+    "docs/guides/configure-mcp-tools.md": "f062a8a98b8eb9b5e915dffeb8b7bc42a6961f34921205a8fd05d50082d4493a",
+    "docs/quick-start.md": "fedc0ef5588d30c6eb7a83460af309386c494799704a47abacacfbc086cb561d",
+    "docs/webui.md": "3252cd9999589b0102bdcf20917220baf11dfce1f5b184471ad8ef7580a2acff",
+    "nanobot/agent/tools/__init__.py": "f66ebadb65069c7a9ab18c432b234ffe6079620b9d56293189cf7efc030812ff",
+    "nanobot/agent/tools/_search_content.py": "669247b2fd0cc03ddab548bc5746e37f68504bd5c92ebf80aa07c66162fe87fd",
+    "nanobot/agent/tools/_windows_job.py": "3ea697365ba02e613fc75fbf0bec31c6eda3fe543d6cffd4cb640f5d3e5c6ebd",
+    "nanobot/agent/tools/apply_patch.py": "4269735200db09c7771a056119c99f9d2de7f67a3971c24843906636420bcffb",
+    "nanobot/agent/tools/base.py": "c73bbe0a1887f232fcd6b3cb63cf22e94bd6fff0fdf573b60f8d7b52c2f58dab",
+    "nanobot/agent/tools/cli_apps.py": "5e30892745440785f7f5d89aa00fb61be21a743236ae2069e602917684c4af11",
+    "nanobot/agent/tools/cli_apps_config.py": "98c3b2b3b7706c8275f3a54128320bd5923593bfed008c24eb98ce53fba63b3f",
+    "nanobot/agent/tools/context.py": "ff348a2843c48c46cbaf57b3ff556961256b4334f3cd1fbfd8e596e4d5d21786",
+    "nanobot/agent/tools/cron.py": "2909a1bd27155ebc28fa62256d29717077a1ac49f262909d65edf97fc641ac14",
+    "nanobot/agent/tools/exec_session.py": "64075cff05b0615b918f733b60a0ac69155eb44df41cbb65500d3e0b633f2f4a",
+    "nanobot/agent/tools/execution.py": "cfbcf6be2b9efd06631727cb41b1ca4a570b523d7516dfe4d6614f20df86ab38",
+    "nanobot/agent/tools/file_state.py": "e242a5a27a3613735451e9c9b5063934fd8afb35927fc5db95a4027a5dc3290f",
+    "nanobot/agent/tools/filesystem.py": "0e2139eaba66ee346e8cf1a6c81a0d2eda5b81748ec871d13d968b567cfc06d3",
+    "nanobot/agent/tools/filesystem_config.py": "8656313e12ba4b8c210b824dc7804e9561a0ee3f49ab2d320da954047e42923d",
+    "nanobot/agent/tools/image_generation.py": "17d1a1ad2a847233e556c65b0ec42a30a620ba1a712086d834879a9c88476ce4",
+    "nanobot/agent/tools/image_generation_config.py": "4eb251dac6199660b1a3369bafd84e75f23c29be603a1d58e7c1f2fbdf8bb596",
+    "nanobot/agent/tools/loader.py": "ae49098d588367d09b15c712b374671868b0018ad9c959f190978c6aa9dd104b",
+    "nanobot/agent/tools/mcp_oauth.py": "f4fee2fbb34d1cdefb05b272b2a9b784d4457681148426312869c98d25b7ec3d",
+    "nanobot/agent/tools/message.py": "2644132f0543ca51df851679d40b3c51b54ee3bad0a461805737873011ca9eb6",
+    "nanobot/agent/tools/path_utils.py": "6190dd10e86769493c66ec572c3b990f3bc4e5ca3fa754036429c6b8e63a98b1",
+    "nanobot/agent/tools/rg.py": "c97c14c198f6f71f10b806503b5a8fe91c831f6062621a3a0a056c940799a17e",
+    "nanobot/agent/tools/runtime_control.py": "2f06fb9c9f475f6d0594b51c8c470fbf6d50fa54d61e3c96afb2f7f42c8fe557",
+    "nanobot/agent/tools/sandbox.py": "6eb1d9fc86ad21f55d2efd9e080fb1961dc26b806dcbbf808cce1c9d48b1cdd2",
+    "nanobot/agent/tools/sandbox_check.py": "bc8166ada51c56f404513bca66072485fdde40436d9fc18865b7cc431c80a384",
+    "nanobot/agent/tools/sandbox_launcher.py": "5c460732f5af1e288ee65cce7241ef895d2f99da9cf86e19de7c172ea9e33d6a",
+    "nanobot/agent/tools/schema.py": "904d8be55932d01b681681fd21ac2918492391e56c1501de17fa1b5eaa0bd7d7",
+    "nanobot/agent/tools/search.py": "535da5e20d3ce67c69a8c58efc73bd58cd0f1395f535c46d14316bedb4255cf9",
+    "nanobot/agent/tools/self.py": "6bfbcc09d203712114df364b7d7c9236a2a223a6373853f1706fdf54a8aca3e5",
+    "nanobot/agent/tools/self_config.py": "0ad121451481e6c9f73cda5e8fdb56c98928bc5b89a20d9be69dbfe4eaba790b",
+    "nanobot/agent/tools/session_messages.py": "a9a97de4a681ff494cf8930104f950348b9331fe3f59edd1e0c2c054fd0fb4d0",
+    "nanobot/agent/tools/sessions.py": "e32afffd182a070f350e64d15d71f0f84ba45ee2c8d46916adb46c62bb6d4ca2",
+    "nanobot/agent/tools/shell.py": "8d8e3cb73a3575abb298c841b77d7730272fba3d065aef73f453a8c6dfd7f916",
+    "nanobot/agent/tools/shell_config.py": "42cd2d871977fb288bb3f0343d9195c9131d317be53eaad44be05c3794e3d240",
+    "nanobot/agent/tools/shell_output.py": "65867e11a6ab90ec538bb4bf4406c704ecb6a505c116844c52c948d31e7b5271",
+    "nanobot/agent/tools/subagent.py": "5446e67f802d974d7fe67d30c186a05217fa06bcdd789fddfbdd94e256e9f414",
+    "nanobot/agent/tools/web.py": "fa99ccef3dc75e2db7429d35898eb8aabb35282011ab517870cc6cad069edc30",
+    "nanobot/agent/tools/web_config.py": "11fd64bbea303f471cf09792ad4986bdaa544eee49eaa2b58d11e743b80aa404",
+    "nanobot/agent/skill_metadata.py": "560fa230dce598954d21a1704bd25528b88146baca19e329f1e192b628fd24c8",
+    "nanobot/agent/skills.py": "73183e955835e1cb59d515c109826c42a103ad7de3ddc9fc0e0432f302332018",
+    "nanobot/channels/base.py": "7dfc1d0f37fcbd75e485313d137b329737a46780cf01daa9e7e01d0f625e4095",
+    "nanobot/session/keys.py": "2376f3137156b8215e8a98e35776d183e0f10d00bc9f72310f17faea39474dd1",
+    "docs/chat-apps.md": "912507d1f8b7607509f96f98750cebe4cbf3cbb74bd8db0df12ba7e17aec5f86",
+    "docs/channel-package-guide.md": "f22c0311a25a4cfde6d3620bdcb452075288217880868cc1cdaf6080d6cf8d70",
+    "nanobot/agent/subagent.py": "a8945090835549057e304c68fa35845c64b72d626b80a2ea8b4900fde7707ab7",
+    "nanobot/cron/service.py": "309fd28289d52990871b8e000ec07126424833c662f81b709904b4411609b66b",
+    "nanobot/cli/gateway_runtime.py": "708080276018b3a9455bed5fcffe6346f612357321dd7ac6fb240cbf3079e011",
+    "nanobot/security/workspace_policy.py": "dede24886e1acc55bf176f2bd95663e5903ddff62821504720785f1ca163fae7",
+    "nanobot/security/network.py": "7dc489abf4dec8bbff87a89e118c243532ef6f6de0c54e62e2efc51620317222",
+    "docker-compose.yml": "23b82a03663f44828eb1d2141f86ff64713a32d0fe32c0136752214efa087431",
+    "Dockerfile": "bbb0195b43df983f7f0d9c9e4b1d8cc2a590a7153932d783da4cd5e0dbb9122f",
+    "docker-compose.bwrap.yml": "d7205b298d81abbdc44c8b8982678938640d6a06a63905bf4674ae365f014326",
+    "docs/python-sdk.md": "36de77a85737258012af34eba9123efe6f5c7461cdd74e481db6832925243618",
+    "nanobot/agent/context_governance.py": "a226043a5c7c29bffef8276748ee5eb442623f2cb136413bc3321e6a9109b375",
+    "nanobot/config/schema.py": "f5916f4f2ef419d803efd35b97697bd7a0bc83b1d213caf721a5521ab1757616",
+    "nanobot/config/loader.py": "c4f8864177928d4b11ccdb46b9699123a327d3787318a88f59162bf838d34d09",
+    "docs/architecture.md": "b3dc8236d22edf28f49759149c8112d272777d2543fd42145f245fba10a6c0ad",
+    "nanobot/providers/base.py": "b01689af881f348dc64b9d40ee1b8f5a38e7af4cbe6b9869926ea4edac5529f2",
+    "nanobot/channels/manager.py": "fd5130cee9473c6f914be6a5572294f2c4fc3c45b6cd9a2c0cbf682c27dd2c48",
+    "nanobot/providers/factory.py": "bbe323f6a82e76daeedc5ae4e7afb9d6157a3f0d501feadbc32fe318132db1ed",
+    "tests/agent/test_runner_core.py": "2ea792ed4b351f05e0285ead74930f6e598aadfd9365a2501bb995c4e94e7b57",
+    "nanobot/session/recovery.py": "cd85ac601bd2a370e8138017200286d536d78102120b6e2bf0eb1a0dec0b424a",
+    "tests/agent/test_task_cancel.py": "aabc883eda100bee78bf988255556d7cfb1ae8906d9ab2dbcbfa5339df4c01f2",
+    "nanobot/gateway/runtime.py": "2e706e724a1411cff3ff052df92c97ea0740d98250644ac06ec3694d4a16e518",
+    "nanobot/security/workspace_access.py": "298b5fa4731e676cdb572d51d836594bf80282341689a1d06c23c28a92d61177"
+  },
+  "excerpts": [
+    {
+      "path": "nanobot/agent/loop.py",
+      "symbol": "AgentLoop._run_turn",
+      "start": 2296,
+      "end": 2332,
+      "sha256": "5e4d7041bc9e25863d193a656c9eec33f895368b157b7b9411e3097754dc2a6c"
+    },
+    {
+      "path": "nanobot/agent/loop.py",
+      "symbol": "AgentLoop._save_turn",
+      "start": 2464,
+      "end": 2573,
+      "sha256": "d47be3787ce58723ab7b4cfd3b22b83c93eb7e28e4c4eae0269fe62548b058dc"
+    },
+    {
+      "path": "nanobot/agent/runner.py",
+      "symbol": "AgentRunner.__init__",
+      "start": 155,
+      "end": 156,
+      "sha256": "5ead257c2c3de673248303de066da3af0f5462b7136bbd6a3bf1893ab44384cf"
+    },
+    {
+      "path": "nanobot/agent/runner.py",
+      "symbol": "AgentRunner.run",
+      "start": 284,
+      "end": 352,
+      "sha256": "34f1a43522aa26115ff7b78843b14e3315c7e99376a8c3eae9a6586e77e47092"
+    },
+    {
+      "path": "nanobot/agent/context.py",
+      "symbol": "ContextBuilder.build_system_prompt",
+      "start": 87,
+      "end": 142,
+      "sha256": "febfd51a70236167b81fc3b52fc354c64592a950fab8f04a22a8e91b18ca999c"
+    },
+    {
+      "path": "nanobot/agent/memory.py",
+      "symbol": "MemoryStore.read_memory",
+      "start": 221,
+      "end": 222,
+      "sha256": "918ace759b56787e4e8472f4a5343725cb1d02c9fd4b5dfc3c648f3d5b9bd0ac"
+    },
+    {
+      "path": "nanobot/agent/memory.py",
+      "symbol": "MemoryStore.write_memory",
+      "start": 224,
+      "end": 225,
+      "sha256": "898ddc3c2e896273930e31f1848f0ded7d0059658591d21066c4793249d820c3"
+    },
+    {
+      "path": "nanobot/agent/tools/registry.py",
+      "symbol": "ToolRegistry.prepare_call",
+      "start": 120,
+      "end": 157,
+      "sha256": "b762500388c23157c9905c09f1da8b4f500b9c5f2123b4b30d87d6a150300bee"
+    },
+    {
+      "path": "nanobot/agent/tools/mcp.py",
+      "symbol": "MCPToolWrapper.execute",
+      "start": 743,
+      "end": 765,
+      "sha256": "c2268e78ec4dad892d3e59a555f25beb947a50ebb44a120276ad2fe1df07005d"
+    },
+    {
+      "path": "nanobot/agent/memory.py",
+      "symbol": "MemoryStore.__init__",
+      "start": 66,
+      "end": 85,
+      "sha256": "db83f1e9b8940fa6a8198d862b288a5d14cfb8c65ac3ec024236230cb5771399"
+    },
+    {
+      "path": "nanobot/agent/tools/mcp.py",
+      "symbol": "MCPToolWrapper.execute",
+      "start": 743,
+      "end": 765,
+      "sha256": "c2268e78ec4dad892d3e59a555f25beb947a50ebb44a120276ad2fe1df07005d"
+    },
+    {
+      "path": "nanobot/agent/skill_metadata.py",
+      "symbol": "valid_skill_metadata",
+      "start": 32,
+      "end": 41,
+      "sha256": "2a73e9d0fa8c6837f0803a527065bf044e747489151d85545d4973b6df19fbe6"
+    },
+    {
+      "path": "nanobot/agent/skills.py",
+      "symbol": "SkillsLoader._discover_skills",
+      "start": 121,
+      "end": 155,
+      "sha256": "72b46aea1e7ca5573c6584817f82a59c62e21835609b79813d9cfc58d32e4897"
+    },
+    {
+      "path": "nanobot/agent/tools/registry.py",
+      "symbol": "ToolRegistry.register",
+      "start": 40,
+      "end": 43,
+      "sha256": "14a40397a6ebba5e1f80d58baa5da3c953f00242db3d3e91342873dd47039b5a"
+    },
+    {
+      "path": "nanobot/agent/tools/registry.py",
+      "symbol": "ToolRegistry.prepare_call",
+      "start": 120,
+      "end": 157,
+      "sha256": "b762500388c23157c9905c09f1da8b4f500b9c5f2123b4b30d87d6a150300bee"
+    },
+    {
+      "path": "nanobot/bus/events.py",
+      "symbol": "InboundMessage",
+      "start": 26,
+      "end": 52,
+      "sha256": "568bbc05431f747896f923d053ec69e7080874e71c277a0013ab8a1608a8f833"
+    },
+    {
+      "path": "nanobot/bus/events.py",
+      "symbol": "OutboundMessage",
+      "start": 55,
+      "end": 73,
+      "sha256": "4728923f044f119334ea0ac173ef1a3c6aa85ac9c033eec021ca265d8e0a6610"
+    },
+    {
+      "path": "nanobot/bus/queue.py",
+      "symbol": "MessageBus.publish_inbound",
+      "start": 38,
+      "end": 42,
+      "sha256": "08aa108a0ba6f1daa2bc3c7d98777a45e8689e4cde9637de5b952bbeefbc6b66"
+    },
+    {
+      "path": "nanobot/bus/queue.py",
+      "symbol": "MessageBus.publish_event",
+      "start": 54,
+      "end": 70,
+      "sha256": "ae1b2b4327f00b6e91091f7629d95a63da77bb648bb5d5c0e90e0c7a2d2f3daa"
+    },
+    {
+      "path": "nanobot/channels/base.py",
+      "symbol": "BaseChannel.start",
+      "start": 87,
+      "end": 97,
+      "sha256": "cfe1146f39988c1f0c7f7910aae0f37edb5e50ecba1cd249eebecbe8c5ca940b"
+    },
+    {
+      "path": "nanobot/channels/base.py",
+      "symbol": "BaseChannel.send",
+      "start": 104,
+      "end": 119,
+      "sha256": "3e849280825030a13befbf56a845aff99335acdc02b7894bbd044120cf98a855"
+    },
+    {
+      "path": "nanobot/session/keys.py",
+      "symbol": "session_key_for_channel",
+      "start": 21,
+      "end": 25,
+      "sha256": "cb6a1041288f88cfa4c5ef71c002a68fd09a75153952b2b886979f8ba6aeed48"
+    },
+    {
+      "path": "nanobot/security/workspace_policy.py",
+      "symbol": "is_path_within",
+      "start": 43,
+      "end": 51,
+      "sha256": "daf02dfcce06d75c8117128badacc4db2fb93edf926c3fe0f5094100a6ff8205"
+    }
+  ],
+  "configs": [
+    {
+      "providers": {
+        "ollama": {
+          "apiBase": "http://localhost:11434/v1"
+        }
+      },
+      "modelPresets": {
+        "local": {
+          "provider": "ollama",
+          "model": "llama3.2",
+          "maxTokens": 2048,
+          "contextWindowTokens": 32768
+        }
+      },
+      "agents": {
+        "defaults": {
+          "modelPreset": "local"
+        }
+      }
+    },
+    {
+      "tools": {
+        "mcpServers": {
+          "learning": {
+            "command": "E:/codexwork/nanobot/.venv/Scripts/python.exe",
+            "args": [
+              "E:/codexwork/nanobot-playground/weather_server.py"
+            ],
+            "toolTimeout": 30,
+            "enabledTools": [
+              "demo_temperature"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "agents": {
+        "defaults": {
+          "maxToolIterations": 200,
+          "maxConcurrentSubagents": 4,
+          "maxToolResultChars": 16000,
+          "timezone": "Asia/Shanghai"
+        }
+      },
+      "gateway": {
+        "heartbeat": {
+          "enabled": true,
+          "intervalS": 1800
+        }
+      }
+    },
+    {
+      "tools": {
+        "web": {
+          "enable": true,
+          "search": {
+            "provider": "duckduckgo",
+            "maxResults": 5,
+            "timeout": 30
+          }
+        }
+      }
+    },
+    {
+      "gateway": {
+        "heartbeat": {
+          "enabled": true,
+          "intervalS": 1800
+        }
+      }
+    },
+    {
+      "tools": {
+        "mcpServers": {
+          "database": {
+            "command": "E:/tools/python/python.exe",
+            "args": [
+              "E:/my-services/db_server.py"
+            ],
+            "enabledTools": [
+              "query_database",
+              "list_tables"
+            ],
+            "toolTimeout": 30
+          }
+        }
+      }
+    }
+  ]
+}

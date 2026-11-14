@@ -1,5 +1,7 @@
 # 第17章 学习资源汇总
 
+> 本地源码基准：`27f1a836b5c04a30763dd91960059f81c05bf505`，版本0.4.1。外部学习资源与统计不属于当前源码已验证结论；项目实现优先查固定提交。 核对范围见 [版本记录](../LOCAL_SOURCE_BASELINE.md)。
+
 > 🎯 本章定位：汇总 AI Agent 学习所需的优质资源，包括开源项目、博客文章、论文、视频教程、社区平台和学习路线图，帮助学习者高效构建知识体系。
 
 ---
@@ -24,7 +26,7 @@
 
 | 仓库 | Stars | 定位 | 推荐理由 |
 |------|-------|------|---------|
-| [HKUDS/nanobot](https://github.com/HKUDS/nanobot) | 37K+ | 轻量级 Agent 框架 | 本项目的核心学习对象，4000 行代码涵盖完整 Agent 能力 |
+| [HKUDS/nanobot](https://github.com/HKUDS/nanobot) | 37K+ | 轻量级 Agent 框架 | 本项目的核心学习对象；按固定提交阅读与验证 |
 | [langchain-ai/langchain](https://github.com/langchain-ai/langchain) | 95K+ | 全功能 LLM 框架 | 最主流的 Agent 框架，生态最丰富 |
 | [langchain-ai/langgraph](https://github.com/langchain-ai/langgraph) | 8K+ | 图结构 Agent 编排 | LangChain 团队的新一代 Agent 框架，更灵活 |
 | [microsoft/autogen](https://github.com/microsoft/autogen) | 35K+ | 多 Agent 对话框架 | 微软开源，多 Agent 协作的代表项目 |
@@ -139,11 +141,11 @@ DeepWiki 是基于 AI 自动生成的开源项目文档平台，对 Nanobot 有�
 ### 3.1 Nanobot DeepWiki 架构文档
 
 - [项目概览与架构](https://deepwiki.com/HKUDS/nanobot)
-- [AgentLoop 详解](https://deepwiki.com/HKUDS/nanobot/agent-loop)
-- [ContextBuilder 与上下文管理](https://deepwiki.com/HKUDS/nanobot/context-builder)
-- [MemoryConsolidator 记忆系统](https://deepwiki.com/HKUDS/nanobot/memory)
-- [ToolRegistry 工具注册](https://deepwiki.com/HKUDS/nanobot/tool-registry)
-- [MCP 集成](https://deepwiki.com/HKUDS/nanobot/mcp-integration)
+- [AgentLoop 详解](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py)
+- [ContextBuilder 与上下文管理](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py)
+- [Consolidator / MemoryArchiver / ContextGovernor 记忆系统](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py)
+- [ToolRegistry 工具注册](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py)
+- [MCP 集成](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py)
 - [SubagentManager 子 Agent](https://deepwiki.com/HKUDS/nanobot/subagent)
 - [Channel 适配器](https://deepwiki.com/HKUDS/nanobot/channel-adapter)
 - [配置系统](https://deepwiki.com/HKUDS/nanobot/configuration)
@@ -360,7 +362,7 @@ DeepWiki 是基于 AI 自动生成的开源项目文档平台，对 Nanobot 有�
 | 天 | 学习内容 | 产出 |
 |----|---------|------|
 | Day 8-9 | 阅读第 4 章（源码逐行解析）—— AgentLoop 部分 | AgentLoop 流程图 |
-| Day 10-11 | 阅读第 4 章 —— MemoryConsolidator、ToolRegistry 部分 | 模块分析笔记 |
+| Day 10-11 | 阅读第 4 章 —— Consolidator / MemoryArchiver / ContextGovernor、ToolRegistry 部分 | 模块分析笔记 |
 | Day 12-13 | 用 MCP Python SDK 开发第一个 MCP Server | 可运行的 MCP Server |
 | Day 14 | 将自己的 MCP Server 集成到 Nanobot 中测试 | 端到端验证成功 |
 
@@ -397,7 +399,7 @@ DeepWiki 是基于 AI 自动生成的开源项目文档平台，对 Nanobot 有�
 #### 第 3-4 周：源码深入研读
 
 - 精读 Nanobot 核心源码（第 4 章）
-- 重点理解 AgentLoop、MemoryConsolidator、ToolRegistry
+- 重点理解 AgentLoop、Consolidator / MemoryArchiver / ContextGovernor、ToolRegistry
 - 开发 2 个自定义 MCP Server
 - 学习第 7-10 章（记忆、工具、多平台、子 Agent）
 
@@ -470,7 +472,7 @@ AI Agent 领域变化极快，保持学习需要：
 
 学习 AI Agent 的资源生态已经非常丰富，关键是**选择合适的路径并坚持执行**：
 
-1. **源码为王**：Nanobot 的 4000 行源码是理解 Agent 原理的最佳教材
+1. **源码为王**：Nanobot 的 当前基准源码是理解 Agent 原理的最佳教材
 2. **实践驱动**：每学一个概念都要动手做实验，看 10 篇博客不如写一个 demo
 3. **论文精选**：不需要读很多论文，但必读论文要精读
 4. **社区参与**：加入社区讨论、提交 Issue/PR，是最快的学习加速器
@@ -480,5 +482,4 @@ AI Agent 领域变化极快，保持学习需要：
 
 ---
 
-*上一章：[第16章 STAR 面试话术](../16-star-interview-script/README.md)*
-*本章是 learn-nanobot 项目的最后一章。祝你面试顺利！*
+*上一章：[第16章 STAR 面试话术](../16-star-interview-script/README.md)* *本章是 learn-nanobot 项目的最后一章。祝你面试顺利！*

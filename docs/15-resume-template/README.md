@@ -1,5 +1,7 @@
 # 第15章 AI Agent 岗位简历模板
 
+> 本章中的业务规模、提升比例、上线和开发内容均是**假设模板**，只有实际完成并有证据才可使用。源码事实按本地 `27f1a836b5c04a30763dd91960059f81c05bf505` 修订；原通用简历结构保留。详见 [版本记录](../LOCAL_SOURCE_BASELINE.md)。
+
 > 🎯 本章定位：提供经过优化的简历模板、项目经历描述范例和简历撰写技巧，帮助求职者打造高通过率的 AI Agent 方向简历。
 
 ---
@@ -106,107 +108,17 @@ MCP Server 开发, Agent 源码研究, Agent 系统设计,
 
 ## 三、Nanobot 项目简历模板
 
-### 模板 A：Agent 框架源码研究项目（适合偏理论/架构方向）
+以下是学习经历模板，未执行/开发的内容必须删除，不能当作自己的既有成果：
 
-```
-项目名称：基于 HKUDS/Nanobot 的 AI Agent 系统源码研究与二次开发
-项目周期：2026.02 - 2026.04
-项目角色：独立研究 / 核心开发
-技术栈：  Python 3.12, HKUDS/nanobot, MCP 协议, Anthropic Claude API,
-         asyncio, JSON-RPC 2.0
-
-项目描述：
-深入研究开源 AI Agent 框架 Nanobot（GitHub 37K+ stars）的完整源码，
-理解其 Agent 循环、记忆管理、工具注册、MCP 集成等核心机制，并基于此
-进行二次开发和能力扩展。
-
-核心职责：
-• 系统研读 Nanobot 核心源码（约 4000 行 Python），完成 8 个核心模块
-  （AgentLoop、ContextBuilder、MemoryConsolidator、ToolRegistry、
-  SubagentManager、MessageBus、MCPClient、ChannelAdapter）的架构
-  分析和流程图绘制
-• 深入分析 AgentLoop 的 ReAct 执行流程，理解 Thought-Action-Observation
-  循环的工程实现，梳理从用户输入到最终回复的完整数据流
-• 研究 MemoryConsolidator 的双层记忆架构（会话内压缩 + 跨会话持久化），
-  理解 save_memory 虚拟工具的设计哲学
-• 分析并发控制设计：session_locks（会话级互斥）和 _concurrency_gate(3)
-  （全局信号量）的分层并发策略
-
-项目成果：
-• 输出 12 篇深度技术文档（共 5 万+ 字），覆盖架构、源码、协议等维度
-• 基于源码理解开发 3 个自定义 MCP Server（MySQL 查询、文档检索、日程管理）
-• 成功将 Nanobot 集成到飞书机器人，实现团队内部 AI 助手功能
-• 形成一套可复用的 Agent 框架评估方法论，从 7 个维度对比 Nanobot 与 LangChain
+```text
+项目：基于固定提交的nanobot源码研读
+工作：梳理Loop编排、Runner循环、上下文、Provider、工具和SessionState
+验证：填写实际断点、模拟测试与文件任务记录
+结论：区分日志预览、SQLite回放和长期记忆整理
+边界：标明尚未验证的服务、平台、业务应用与长期运行
 ```
 
----
-
-### 模板 B：AI 助手应用项目（适合偏工程/产品方向）
-
-```
-项目名称：基于 Nanobot 的企业智能助手系统
-项目周期：2026.02 - 2026.04
-项目角色：后端开发 / 技术负责人
-技术栈：  Python, HKUDS/nanobot, MCP 协议, Claude API, FastAPI,
-         PostgreSQL, Redis, Docker, 飞书开放平台
-
-项目描述：
-基于 Nanobot Agent 框架构建企业级 AI 助手系统，集成多个 MCP 工具服务器，
-支持飞书和 Web 双平台接入，为团队提供知识库问答、日程管理、数据查询等
-智能化办公能力。
-
-核心职责：
-• 基于 Nanobot 的 Channel 适配器模式开发飞书和 Web 双平台接入层，
-  实现消息格式的统一转换和路由，支持文本、图片、文件等多种消息类型
-• 开发 5 个自定义 MCP Server：数据库查询工具（支持自然语言转 SQL）、
-  文档检索工具（基于向量相似度）、日程管理工具（对接飞书日历 API）、
-  Jira 集成工具（查询和创建 Issue）、通知工具（飞书群消息推送）
-• 利用 Nanobot 的 Skills 渐进披露机制，设计 8 个领域 Skill（数据分析、
-  周报生成、会议纪要整理等），实现工具的按需加载，system prompt
-  token 占用减少 40%
-• 实现基于 Redis 的语义缓存层，对相似查询命中率达 35%，LLM API
-  月度成本降低约 25%
-
-项目成果：
-• 系统上线后日均处理 500+ 次对话请求，用户满意度评分 4.2/5.0
-• 工具调用成功率 94%，平均响应时间 3.2 秒
-• 团队信息检索效率提升约 60%，减少了大量重复性问答沟通
-```
-
----
-
-### 模板 C：MCP 工具开发项目（适合偏协议/基础设施方向）
-
-```
-项目名称：企业级 MCP 工具服务器集群开发
-项目周期：2026.03 - 2026.04
-项目角色：核心开发者
-技术栈：  Python, MCP SDK, JSON-RPC 2.0, FastAPI, Docker,
-         PostgreSQL, Elasticsearch
-
-项目描述：
-基于 MCP（Model Context Protocol）协议规范，为企业内部 AI Agent 系统
-开发标准化的工具服务器集群，实现企业数据和业务系统与 AI 应用的标准化连接。
-
-核心职责：
-• 基于 MCP Python SDK 开发 6 个工具服务器，覆盖数据库查询（MySQL/PostgreSQL）、
-  全文检索（Elasticsearch）、项目管理（Jira）、即时通讯（飞书/钉钉）、
-  文件系统操作、HTTP API 代理等能力
-• 设计 MCP Server 的统一安全框架：实现 API Key 认证、输入参数 JSON Schema
-  验证、敏感操作确认机制（destructive annotation）、操作审计日志
-• 实现 MCP Server 的 stdio 和 HTTP+SSE 双传输模式支持，本地开发使用 stdio
-  模式提升调试效率，生产环境使用 HTTP+SSE 模式支持远程访问和多用户共享
-• 编写完整的工具描述文档，确保 LLM 能准确理解每个工具的用途和参数要求，
-  将工具调用准确率从 78% 提升至 93%
-
-项目成果：
-• 6 个 MCP Server 已集成到 3 个不同的 AI Agent 应用中（Nanobot、Cursor、
-  内部 Agent 平台），验证了 MCP 的「一次开发，多处复用」核心价值
-• 将新 AI 应用接入内部系统的开发周期从平均 2 周缩短到 2 天
-• 项目文档和设计方案被团队采纳为 MCP Server 开发规范
-```
-
----
+当前Runner由组件复用，状态通过SessionState提交SQLite；Consolidator、MemoryArchiver、ContextGovernor与Dream分工；请求gate来自环境配置。不能沿用每消息新建、固定并发3、save_memory统一拦截或HISTORY.md主存储。
 
 ## 四、智能运维助手项目简历模板
 
@@ -228,7 +140,7 @@ MCP Server 开发, Agent 源码研究, Agent 系统设计,
 • 开发 6 个运维领域 MCP Server：日志检索工具（对接 Elasticsearch）、
   服务器监控工具（对接 Prometheus API）、告警管理工具（对接 PagerDuty）、
   部署工具（对接 Kubernetes API）、数据库巡检工具、网络诊断工具
-• 利用 Nanobot 的 MemoryConsolidator 记忆系统，实现运维知识的持久化——
+• 利用 Nanobot 的 Consolidator / Dream 记忆系统，实现运维知识的持久化——
   Agent 自动记忆历史故障模式和解决方案，相似故障再次发生时可快速匹配
   历史经验
 • 设计运维 Skill 体系：按照故障类型（CPU 过高、内存泄漏、磁盘满、
@@ -370,7 +282,7 @@ AI 客服解决方案。
 ### 模板 1：Agent 开发方向（应届/1-3年）
 
 ```
-• 对 AI Agent 系统有深入理解，系统研读过 Nanobot 框架源码（~4000行），
+• 对 AI Agent 系统有深入理解，系统研读过 Nanobot 框架源码（按本章指定提交），
   掌握 AgentLoop、记忆管理、工具注册等核心模块的设计原理
 • 熟悉 MCP 协议规范，有自主开发 MCP Server 的实践经验
 • 具备扎实的 Python 编程基础，熟练使用 asyncio 异步编程
@@ -438,8 +350,8 @@ XX 大学        计算机科学与技术 本科        2022.09 - 2026.06
 基于 Nanobot 的企业智能助手系统          2026.02 - 2026.04
 技术栈：Python, Nanobot, MCP, Claude API, FastAPI, Redis, Docker
 
-• 系统研读 Nanobot 核心源码（~4000 行），深入理解 AgentLoop 的
-  ReAct 执行流程、MemoryConsolidator 的双层记忆架构、ToolRegistry
+• 系统研读 Nanobot 核心源码（按本章指定提交），深入理解 AgentLoop 的
+  ReAct 执行流程、Consolidator / Dream 的双层记忆架构、ToolRegistry
   的注册表模式等核心设计
 • 基于 MCP 协议开发 5 个自定义工具服务器（数据库查询、文档检索、
   日程管理、Jira 集成、飞书通知），实现了企业内部系统与 AI Agent
@@ -525,7 +437,7 @@ XX 大学        计算机科学与技术 本科        2022.09 - 2026.06
 ### 11.1 AI Agent 开发工程师
 
 **重点突出**：
-- Agent 框架源码理解（Nanobot AgentLoop、MemoryConsolidator 等）
+- Agent 框架源码理解（Nanobot AgentLoop、Consolidator / Dream 等）
 - MCP 协议实践（开发过 MCP Server）
 - 工具调用可靠性设计（超时、重试、截断）
 - 系统设计能力（高可用、并发控制）
@@ -616,7 +528,7 @@ XX 大学        计算机科学与技术 本科        2022.09 - 2026.06
 ```
 您好！我是 XX 大学计算机专业应届生，对 AI Agent 开发方向有深入学习
 和实践：
-1. 系统研读过 Nanobot 框架源码（4000行），理解 AgentLoop 等核心机制
+1. 系统研读过 Nanobot 框架源码（当前基准核心源码），理解 AgentLoop 等核心机制
 2. 有 MCP Server 开发经验，开发过 5 个自定义工具
 3. 有多平台 AI 客服系统的开发经验，支持飞书/钉钉/微信/Web 四平台接入
 
@@ -639,5 +551,4 @@ XX 大学        计算机科学与技术 本科        2022.09 - 2026.06
 
 ---
 
-*上一章：[第14章 就业市场分析](../14-job-market-analysis/README.md)*
-*下一章：[第16章 STAR 面试话术](../16-star-interview-script/README.md)*
+*上一章：[第14章 就业市场分析](../14-job-market-analysis/README.md)* *下一章：[第16章 STAR 面试话术](../16-star-interview-script/README.md)*

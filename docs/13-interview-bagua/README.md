@@ -1,5 +1,7 @@
 # 第13章 AI Agent 面试八股文大全（134题）
 
+> 本地源码基准：`27f1a836b5c04a30763dd91960059f81c05bf505`，版本0.4.1。通用理论保留，涉及Nanobot的回答已对照当前代码；不能将通用设计选项当成项目现有功能。 核对范围见 [版本记录](../LOCAL_SOURCE_BASELINE.md)。
+
 > 🎯 本章定位：面试前突击宝典，覆盖 Agent 基础、Nanobot 源码、MCP 协议、大模型原理、训练优化、RAG、多智能体、系统设计、工程实践九大板块，共 134 道高频面试题，每题附详细答案与加分点。
 
 ---
@@ -21,35 +23,43 @@
 
 ## 一、Agent 基础（Q1-Q15）
 
-### Q1. 什么是 AI Agent？它与普通 LLM 调用有什么区别？
+### Q1. 什么是AI Agent，它与一次模型调用有何区别？
 
-**答案：** AI Agent 是一种以大语言模型为「大脑」，能自主感知环境、制定计划、调用工具、观察结果并迭代执行的智能体系统。与普通 LLM 调用最核心的区别在于三点：第一，Agent 具备**工具使用能力**，可以调用外部 API、读写文件、执行代码；第二，Agent 拥有**记忆系统**，能在多轮交互中保持上下文并积累经验；第三，Agent 具备**规划与反思能力**，可以将复杂任务拆解为子步骤，并根据中间结果动态调整策略。普通 LLM 调用本质是「一问一答」的无状态函数，而 Agent 是一个持续运行的决策循环。
+**当前版本回答：** 运行时围绕模型管理上下文、工具、状态和迭代。普通任务可能多次请求模型并产生外部副作用，但不是所有Agent都必须有显式规划类或长期记忆。
 
-**面试加分点：** 可以画出 Agent = LLM + Memory + Tools + Planning 的经典架构图来辅助说明，并提到 Manus、Devin 等 2025-2026 年的标志性 Agent 产品来展示行业认知。
+**源码依据：** [nanobot/agent/runner.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py)。
 
----
-
-### Q2. 请解释 ReAct（Reasoning + Acting）框架的核心思想
-
-**答案：** ReAct 框架由 Yao et al. (2022) 提出，核心思想是将大模型的**推理（Reasoning）**和**行动（Acting）**交替进行。具体流程为：模型先产生一段 Thought（思考当前情况、分析下一步该做什么），然后选择一个 Action（如调用搜索工具），得到 Observation（工具返回结果），再进入下一轮 Thought-Action-Observation 循环，直到得出最终答案。ReAct 的关键优势在于：相比纯 Chain-of-Thought 只推理不行动，它能获取实时外部信息；相比纯 Act 模式（直接调用工具），它增加了推理链使行为可解释、可调试。Nanobot 的 AgentLoop 本质上就是一个 ReAct 循环实现。
-
-**面试加分点：** 能说出 ReAct 论文的全称「ReAct: Synergizing Reasoning and Acting in Language Models」，并能对比 ReAct 与 Reflexion、Plan-and-Solve 等其他推理框架的差异。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q3. Agent 的规划（Planning）模块通常有哪些实现方式？
+### Q2. ReAct如何对应当前工具循环？
 
-**答案：** 规划模块是 Agent 拆解复杂任务为可执行步骤的核心能力，主要有以下实现方式：（1）**任务分解（Task Decomposition）**：如 Chain-of-Thought 逐步推理，或 Tree-of-Thought 多路径探索；（2）**子目标拆分**：将大任务分解为有依赖关系的子目标，如 HuggingGPT 先规划工具调用链再逐一执行；（3）**Reflection/自我纠错**：如 Reflexion 框架，在执行失败后反思原因并修改计划；（4）**外部规划器**：使用经典 AI 规划算法（如 PDDL）或代码生成来制定计划；（5）**Orchestrator-Workers 模式**：主 Agent 负责规划和分配，子 Agent 负责执行具体步骤。Nanobot 中 SubagentManager 就是 Orchestrator-Workers 模式的实现。
+**当前版本回答：** 推理—行动—观察可帮助理解结构，但显式Thought是教学表达，不要求当前模型公开完整思考链。实际路径由响应、工具与运行约束驱动。
 
-**面试加分点：** 能提到 Planning 目前最大的痛点是长期规划的可靠性不足，以及 Agent 容易陷入「死循环」的问题，这也是 Nanobot 设置 15 次迭代上限的原因。
+**源码依据：** [nanobot/agent/runner.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q4. Agent 的记忆系统分为哪几种？各自的作用是什么？
+### Q3. 规划通常如何实现，当前子任务如何参与？
 
-**答案：** Agent 记忆系统通常分为三层：（1）**短期记忆（Working Memory）**：即当前会话的上下文窗口，包括用户消息、工具调用结果等。受限于模型的 context window 长度（如 128K tokens），是最直接但容量有限的记忆形式。（2）**长期记忆（Long-term Memory）**：跨会话持久化的信息，如用户偏好、历史决策、项目知识等，通常通过向量数据库或文件系统实现。Nanobot 的 MemoryConsolidator 就负责将短期记忆压缩写入 `~/.nanobot/memory/` 目录。（3）**外部知识库（External Knowledge）**：通过 RAG 检索的文档、数据库、API 等外部数据源，本质是可按需加载的「参考资料」。三者协同工作：短期记忆保证连贯性，长期记忆保证个性化，外部知识保证准确性。
+**当前版本回答：** 可动态工具选择、分步提示、外部工作流或编排子任务。当前SubagentManager有自己的Runner与任务归属/容量控制，不用固定15次推断全部规划能力。
 
-**面试加分点：** 可以将这三层类比为人类的「工作记忆」「海马体长期记忆」和「图书馆查阅」，面试官会觉得你理解深刻。
+**源码依据：** [nanobot/agent/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q4. 会话、摘要、长期记忆与外部知识有何区别？
+
+**当前版本回答：** 会话SQLite与预算内回放不同，摘要服务压缩，Agent资料和history.jsonl服务长期整理，外部知识由工具按需获取。不要统称HISTORY.md或声称自动全量记住。
+
+**源码依据：** [nanobot/agent/memory.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -61,11 +71,13 @@
 
 ---
 
-### Q6. Agent 如何进行工具选择？有哪些策略？
+### Q6. 工具与技能怎样被选择？
 
-**答案：** Agent 工具选择的策略主要有：（1）**全量注入**：将所有可用工具的描述放入 system prompt，由 LLM 自主选择。简单直接但 tool 数量多时会占用大量上下文空间。（2）**渐进披露（Progressive Disclosure）**：先给模型少量核心工具，当模型需要特定能力时再动态加载。Nanobot 的 Skills 系统就采用这种策略，通过 `description` 字段让模型判断是否需要读取完整 Skill 文件。（3）**语义检索**：将工具描述向量化，根据当前任务语义检索最相关的 Top-K 工具注入。（4）**分层路由**：先由一个「路由模型」判断任务类型，再加载对应类别的工具集。实际工程中通常组合使用这些策略。
+**当前版本回答：** 模型依据可用工具Schema和描述提出调用，SkillsLoader/ContextBuilder可提供always技能、其他摘要及显式技能上下文。工具定义不是任意Python函数列表，渐进披露也不保证固定比例省Token。
 
-**面试加分点：** 提到 Nanobot 中 `_TOOL_RESULT_MAX_CHARS = 16000` 的截断设计，说明工具调用结果也需要控制大小以保护上下文窗口。
+**源码依据：** [nanobot/agent/skills.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skills.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -93,19 +105,23 @@
 
 ---
 
-### Q10. 请解释 Orchestrator-Workers 模式
+### Q10. Orchestrator-Workers怎样对应子Agent？
 
-**答案：** Orchestrator-Workers 是一种多 Agent 协作模式，由一个「编排器（Orchestrator）」Agent 负责任务分解和分配，多个「工人（Worker）」Agent 负责执行具体子任务。工作流程为：用户请求 → Orchestrator 分析任务并拆解为子任务 → 将子任务分发给不同 Worker → Worker 各自执行并返回结果 → Orchestrator 汇总结果并返回给用户。Nanobot 的 SubagentManager 就是这种模式的实现：主 Agent 通过 `Task` 工具启动子 Agent，每个子 Agent 有独立的 AgentLoop 和上下文，执行完毕后将结果返回主 Agent。关键设计考虑包括：子任务的粒度划分、结果的合并策略、失败子任务的重试机制、以及防止递归嵌套过深（Nanobot 限制 15 次迭代）。
+**当前版本回答：** 主任务可经subagent工具把工作交给管理器，带独立任务上下文与状态，并接收结果。当前不是为每条子消息新建AgentLoop；并发收益需实测。
 
-**面试加分点：** 对比 Orchestrator-Workers 与「流水线（Pipeline）」模式的差异——前者是并行扇出再汇总，后者是串行传递。
+**源码依据：** [nanobot/agent/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q11. Agent 系统中的状态管理有哪些挑战？
+### Q11. 状态管理有哪些挑战？
 
-**答案：** Agent 状态管理的核心挑战包括：（1）**上下文膨胀**：随着对话轮次增加和工具调用累积，上下文 token 数持续增长，可能超出模型窗口限制。解决方案包括对话压缩（如 Nanobot 的 MemoryConsolidator）、滑动窗口、摘要替换等。（2）**状态一致性**：多个工具调用可能修改共享状态（如文件系统），需要保证操作的原子性和一致性。Nanobot 使用 `session_locks` 和 `_concurrency_gate(3)` 来控制并发。（3）**持久化与恢复**：Agent 可能被中断后恢复，需要保存足够的状态信息。（4）**多 Agent 状态同步**：在多 Agent 架构中，不同 Agent 之间的状态共享和隔离需要精心设计。（5）**幂等性**：相同的工具调用应该产生相同的结果，避免副作用累积。
+**当前版本回答：** 历史增长、并发修改、取消收尾、恢复与外部副作用一致性都需分层处理。会话锁、可选请求gate、工具批次和SessionState不是同一层；不能把所有外部动作承诺为幂等。
 
-**面试加分点：** 结合 Nanobot 源码中 `MessageBus` 的双队列设计来解释状态管理的实际工程方案。
+**源码依据：** [nanobot/session/state.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/state.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -125,11 +141,13 @@
 
 ---
 
-### Q14. Agent 系统中如何处理长任务（Long-horizon Tasks）？
+### Q14. 长任务如何对应当前机制？
 
-**答案：** 长任务处理是 Agent 的核心难点之一。主要策略有：（1）**分层规划**：将长任务分解为高层计划和低层执行步骤，高层计划相对稳定，低层步骤可以灵活调整。（2）**检查点机制（Checkpointing）**：定期保存中间状态，失败时可以从检查点恢复而非从头开始。（3）**记忆压缩**：使用摘要技术压缩历史交互记录，保留关键信息而丢弃冗余细节。Nanobot 的 MemoryConsolidator 就是这种机制的实现。（4）**子任务委托**：通过 Orchestrator-Workers 模式将子任务委托给独立的 Agent，每个子 Agent 只需关注局部上下文。（5）**进度跟踪**：维护一个显式的任务进度列表，帮助 Agent 知道「已完成什么」和「还需要做什么」。
+**当前版本回答：** ContextGovernor与Consolidator协调上下文预算和摘要，检查点/恢复与Goal继续另有路径；子任务可分工。当前不靠普通Runner统一拦截save_memory，也不承诺所有中断副作用自动重放。
 
-**面试加分点：** 提到 Nanobot 中 `save_memory` 虚拟工具允许 Agent 主动将重要信息持久化，这是处理长任务时的关键能力。
+**源码依据：** [nanobot/session/recovery.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/recovery.py)。
+
+**自查：** 区分源码事实、设计选项、模拟验证与真实运行。
 
 ---
 
@@ -143,177 +161,203 @@
 
 ## 二、Nanobot 专项（Q16-Q35）
 
-### Q16. Nanobot 是什么？它在 Agent 框架生态中的定位是什么？
+### Q16. 当前Nanobot是什么？
 
-**答案：** Nanobot 是由 HKUDS（香港大学数据科学实验室）开源的一个轻量级 AI Agent 框架，GitHub 上获得 37K+ stars。它的核心定位是**「用最少的代码实现最完整的 Agent 能力」**——整个核心代码只有约 4000 行 Python，但涵盖了 Agent 循环、记忆管理、工具注册、MCP 集成、子 Agent 管理、多平台适配等完整功能。与 LangChain（10万+行代码、大量抽象层）形成鲜明对比，Nanobot 的设计哲学是「极简但完整」，强调代码可读性和架构清晰度。它非常适合作为学习 Agent 内部原理的教学项目，同时也具备生产可用的能力。
+**当前版本回答：** 自托管Agent工程，Python gateway提供执行、会话、工具、记忆和安全，WebUI/TUI与渠道复用。版本结论限定到本地SHA，不依赖静态4000行或平台数量。
 
-**面试加分点：** 提到 Nanobot 的代码量相当于一个优秀的课程设计项目，但架构设计达到了工业级水准，这种「小而精」的设计思想本身就值得学习。
+**源码依据：** [docs/concepts.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/concepts.md)。
 
----
-
-### Q17. 请详细描述 Nanobot AgentLoop 的运行流程
-
-**答案：** AgentLoop 是 Nanobot 的核心引擎，运行流程如下：（1）**初始化阶段**：加载配置文件，实例化 ToolRegistry、MemoryConsolidator 等组件，注册所有可用工具（包括 MCP 工具和内置工具）。（2）**上下文构建**：ContextBuilder 将 system prompt、历史消息、可用工具列表、记忆片段组装为完整的请求体。（3）**LLM 调用**：将构建好的上下文发送给大模型 API（如 Claude/GPT），获取模型响应。（4）**响应解析**：解析模型返回的内容，判断是纯文本回复还是工具调用请求。（5）**工具执行**：如果是工具调用，通过 ToolRegistry 查找并执行对应工具函数，收集返回结果。（6）**结果注入**：将工具执行结果以 `tool_result` 消息形式追加到对话历史。（7）**循环判断**：如果模型继续请求工具调用，回到步骤3；如果模型输出最终文本回复，结束循环。（8）**记忆持久化**：会话结束时，MemoryConsolidator 将重要信息写入长期记忆。
-
-**面试加分点：** 能画出 AgentLoop 的流程图，并指出它本质上是 ReAct 框架的工程实现。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q18. ContextBuilder 在 Nanobot 中的作用是什么？它如何管理上下文？
+### Q17. AgentLoop当前怎样推进一轮？
 
-**答案：** ContextBuilder 负责在每次 LLM 调用前组装完整的请求上下文，是「控制模型看到什么信息」的核心组件。它的主要职责包括：（1）**System Prompt 组装**：将基础 system prompt、Skills 描述、用户自定义规则等拼接为完整的系统提示词；（2）**消息历史管理**：维护对话历史列表，包括用户消息、助手回复、工具调用和工具结果；（3）**上下文窗口控制**：当消息历史过长时，调用 MemoryConsolidator 进行压缩，确保不超出模型的 context window；（4）**工具列表注入**：根据当前状态动态决定注入哪些工具的描述信息；（5）**记忆片段注入**：将相关的长期记忆片段检索并注入到上下文中。ContextBuilder 的设计体现了一个核心原则：**上下文是 Agent 最宝贵的资源，必须精心管理**。
+**当前版本回答：** restore、compact、command、build、run、save、respond，命令可提前处理。共享Runner完成模型工具循环，状态与交付各有边界。
 
-**面试加分点：** 提到 ContextBuilder 与 Anthropic 的 Prompt Cache 技术结合可以大幅降低 API 成本——重复的 system prompt 部分不需要重新计算。
+**源码依据：** [nanobot/agent/loop.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py)。
 
----
-
-### Q19. MemoryConsolidator 的压缩策略是什么？
-
-**答案：** MemoryConsolidator 是 Nanobot 的记忆管理核心，负责两个层面的记忆处理：（1）**会话内压缩（In-session Consolidation）**：当对话历史的 token 数接近上下文窗口限制时，MemoryConsolidator 会将较早的对话轮次压缩为摘要。压缩策略是让 LLM 自己生成对话摘要，保留关键决策、重要事实和用户偏好，丢弃冗余的中间推理过程。压缩后的摘要替换原始消息，释放上下文空间。（2）**跨会话持久化（Cross-session Persistence）**：会话结束时（或通过 `save_memory` 虚拟工具主动触发），将重要信息以 Markdown 文件形式写入 `~/.nanobot/memory/` 目录。下次会话开始时，ContextBuilder 会读取这些记忆文件并注入到上下文中。这种分层设计兼顾了短期连贯性和长期个性化。
-
-**面试加分点：** 对比 Nanobot 的记忆方案与 MemGPT 的「虚拟内存分页」方案的思路差异。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q20. ToolRegistry 的设计和工作原理是什么？
+### Q18. ContextBuilder如何准备请求？
 
-**答案：** ToolRegistry 是 Nanobot 的工具注册中心，采用注册表模式（Registry Pattern）管理所有可用工具。核心设计包括：（1）**统一接口**：每个工具定义为一个包含 `name`、`description`、`input_schema`（JSON Schema 格式的参数定义）和 `handler`（执行函数）的对象。（2）**动态注册**：支持在运行时动态添加和移除工具，MCP 工具在建立连接后自动注册到 ToolRegistry 中。（3）**工具查找**：AgentLoop 解析模型的工具调用请求时，通过工具名在 Registry 中查找对应的 handler。（4）**工具描述导出**：ContextBuilder 需要工具列表时，ToolRegistry 导出所有工具的 `name`、`description`、`input_schema` 供模型选择。（5）**结果处理**：执行工具后统一处理返回值，包括大小截断（`_TOOL_RESULT_MAX_CHARS = 16000`）和错误包装。这种设计使内置工具和 MCP 外部工具对 Agent 来说完全透明统一。
+**当前版本回答：** 结合身份、bootstrap、工具契约、当前项目、条件记忆、技能与摘要，再由TranscriptInput等组织历史和当前输入。界面历史不等于完整Provider请求。
 
-**面试加分点：** 能说出 ToolRegistry 的设计本质是「依赖注入」思想——AgentLoop 不关心具体工具的实现细节，只依赖统一的工具接口。
+**源码依据：** [nanobot/agent/context.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py)。
 
----
-
-### Q21. SubagentManager 如何防止递归爆炸？为什么设置 15 次迭代限制？
-
-**答案：** SubagentManager 管理子 Agent 的创建和生命周期，其 15 次迭代上限是一个关键的安全设计。原因和机制如下：（1）**递归风险**：主 Agent 可以通过 `Task` 工具启动子 Agent，如果子 Agent 也启动子-子 Agent，可能形成无限递归，导致 token 消耗失控和系统资源耗尽。15 次上限确保单个子 Agent 的执行步骤有界。（2）**成本控制**：每次迭代都意味着一次 LLM API 调用，15 次是在任务完成概率和成本之间的经验平衡点。（3）**死循环检测**：如果 Agent 在 15 次迭代内无法完成任务，通常意味着任务描述不清晰或 Agent 陷入了重复操作，此时强制终止比继续消耗更合理。（4）**深度限制**：除了单个 Agent 的迭代限制，还可以限制 Agent 嵌套的深度层数，防止 A→B→C→D→... 的深层递归链。
-
-**面试加分点：** 能类比操作系统中进程 fork 的资源限制（如 ulimit），说明这是一种常见的系统保护模式。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q22. MessageBus 的双队列设计是什么？解决了什么问题？
+### Q19. Consolidator与ContextGovernor如何分工？
 
-**答案：** MessageBus 是 Nanobot 内部的消息传递机制，采用双队列设计来解耦消息的生产和消费。具体来说：（1）**输入队列（Input Queue）**：接收来自外部的消息，如用户输入、Channel 适配器转发的消息。消息按到达顺序排队，等待 AgentLoop 处理。（2）**输出队列（Output Queue）**：AgentLoop 生成的回复消息放入输出队列，由对应的 Channel 适配器取出并发送给用户。双队列设计解决了几个关键问题：（a）**异步解耦**：消息接收和 Agent 处理异步执行，不会因为 Agent 处理慢而阻塞消息接收；（b）**多平台适配**：不同平台（CLI、飞书、钉钉）的消息格式不同，MessageBus 提供统一的内部消息格式，Channel 适配器负责格式转换；（c）**并发控制**：通过队列机制天然实现消息的顺序处理，避免并发冲突。
+**当前版本回答：** MemoryArchiver/Consolidator处理归档与摘要协调，ContextGovernor控制模型请求预算。当前没有旧教程所述MemoryConsolidator固定条数双Markdown压缩主路径。
 
-**面试加分点：** 能对比 MessageBus 与 Kafka/RabbitMQ 等消息队列的思路相似性，说明即使是轻量级系统也遵循相同的架构原则。
+**源码依据：** [nanobot/agent/context_governance.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context_governance.py)。
 
----
-
-### Q23. Nanobot 的 Skills 渐进披露（Progressive Disclosure）机制是什么？
-
-**答案：** Skills 渐进披露是 Nanobot 管理大量技能/工具描述的优雅策略。核心思想是：**不要一次性把所有工具的完整信息塞给模型，而是分层逐步展示**。实现方式为：（1）**第一层：标题+简介**：在 system prompt 中只注入每个 Skill 的名称和一行描述（如 `"create-rule: 创建 Cursor 规则文件"`），占用极少 token。（2）**第二层：按需展开**：当模型判断某个 Skill 与当前任务相关时，通过读取 Skill 文件获取完整的说明、参数定义和使用示例。这种设计的优势包括：节省上下文空间、降低模型在大量工具中「选择困难」的概率、支持无限扩展 Skill 数量而不增加基础 prompt 长度。这与 UI 设计中的「渐进披露」原则完全一致——先展示概要，用户需要时再展示详情。
-
-**面试加分点：** 可以对比 LangChain 中每次都注入所有工具完整描述的方式，说明 Nanobot 的方案在工具数量较多时更高效。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q24. Nanobot 如何集成 MCP 协议？
+### Q20. ToolRegistry的真实接口是什么？
 
-**答案：** Nanobot 通过 MCP Client 的方式集成 MCP 协议，流程如下：（1）**配置声明**：在 `~/.nanobot/config.json` 中声明 MCP Server 列表，包括每个 Server 的启动命令、传输方式（stdio 或 HTTP+SSE）和连接参数。（2）**连接建立**：AgentLoop 启动时，MCPClient 模块按照配置逐个启动 MCP Server 进程并建立连接。（3）**工具发现**：连接建立后，通过 MCP 协议的 `tools/list` 方法获取每个 Server 提供的工具列表（名称、描述、参数 Schema）。（4）**注册到 ToolRegistry**：将 MCP 工具统一注册到 ToolRegistry，与内置工具无差别对待。（5）**工具调用**：当 Agent 决定调用某个 MCP 工具时，ToolRegistry 找到对应的 MCP handler，通过 MCP 协议发送 `tools/call` 请求到对应 Server，接收结果并返回。这种设计使 Nanobot 可以通过 MCP 无限扩展工具能力。
+**当前版本回答：** register(tool)、get_definitions、prepare_call、execute；准备阶段查名称、按Schema转换和校验，执行器与具体工具处理生命周期和授权。
 
-**面试加分点：** 提到 Nanobot 的 MCP 集成是「Host-Client」模式——Nanobot 同时是 MCP Host（宿主应用）和 Client（协议客户端）。
+**源码依据：** [nanobot/agent/tools/registry.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py)。
 
----
-
-### Q25. `_TOOL_RESULT_MAX_CHARS = 16000` 这个常量的设计考量是什么？
-
-**答案：** 这个常量定义了工具调用返回结果的最大字符数，超过时会被截断。设计考量包括：（1）**保护上下文窗口**：工具返回的结果会被追加到对话历史中，如果不限制大小，一次文件读取可能返回几十万字符，瞬间耗尽上下文空间。16000 字符约 4000-5000 tokens，是一个合理的「既能包含足够信息又不会过度占用」的平衡点。（2）**降低成本**：更多 token 意味着更高的 API 费用。（3）**提升模型处理质量**：研究表明模型在处理超长输入时效果会下降（Lost in the Middle 问题），截断后模型反而能更好地利用信息。（4）**截断策略**：通常保留头部和尾部信息，中间部分截断，因为文件/结果的开头和结尾往往包含最关键的信息。
-
-**面试加分点：** 能提到这个值可以根据使用的模型的 context window 大小进行调整——使用 200K 窗口的模型时可以适当增大。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q26. Nanobot 的 `session_locks` 并发控制机制是什么？
+### Q21. 子Agent怎样限制资源与控制任务？
 
-**答案：** `session_locks` 是 Nanobot 实现会话级并发控制的核心机制。每个会话（session）关联一个异步锁（asyncio.Lock），确保同一个会话中同一时刻只有一个 AgentLoop 在执行。这解决了以下问题：（1）**消息竞态**：如果用户快速连续发送多条消息，没有锁的话多个 AgentLoop 可能同时操作同一个对话历史，导致消息交叉和状态混乱。（2）**资源保护**：同一会话的文件操作、数据库操作等需要串行执行以保证一致性。（3）**Token 控制**：防止同一会话同时发起多个 LLM 调用导致成本失控。`session_locks` 使用字典结构 `{session_id: Lock}` 管理，会话首次活动时创建锁，后续请求需要先获取锁才能执行。
+**当前版本回答：** 管理器按配置给出max_iterations和max_concurrent_subagents，并有活动、收件箱与归属边界；默认迭代来自AgentDefaults，不是恒定15。取消、部分结果与完成分开。
 
-**面试加分点：** 能区分 `session_locks`（会话级互斥）和 `_concurrency_gate`（全局并发度限制）的不同层次——前者保证会话内有序，后者保证系统级资源可控。
+**源码依据：** [nanobot/agent/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py)。
 
----
-
-### Q27. `_concurrency_gate(3)` 的作用和设计原理是什么？
-
-**答案：** `_concurrency_gate(3)` 是一个全局信号量（Semaphore），限制整个 Nanobot 实例同时执行的 AgentLoop 数量不超过 3 个。设计原理包括：（1）**资源保护**：每个 AgentLoop 会占用显著的内存（对话历史）和网络资源（LLM API 连接），无限制并发可能导致内存溢出或 API 限流。（2）**API Rate Limit 适配**：大模型 API 通常有并发和 QPM 限制，3 个并发是一个保守但安全的默认值。（3）**服务质量保证**：限制并发可以确保每个用户请求都能获得足够的计算资源和响应速度，避免资源争抢导致所有请求都变慢。（4）**可配置性**：这个值可以根据实际部署环境调整——单机开发环境用 3 足够，生产环境可以通过水平扩展实例来增加总并发数。这与 Web 服务器的 worker 数量限制是同一种思路。
-
-**面试加分点：** 可以提到 Python asyncio.Semaphore 的使用方式，以及与线程池 ThreadPoolExecutor 的 max_workers 参数的类比。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q28. `save_memory` 虚拟工具的设计巧妙在哪里？
+### Q22. MessageBus除了双队列还有什么？
 
-**答案：** `save_memory` 是一个「虚拟工具」——它在 ToolRegistry 中注册但并不执行外部操作，而是由 AgentLoop 内部特殊处理。其巧妙之处在于：（1）**模型主动持久化**：让模型（而非开发者的硬编码逻辑）决定什么信息值得保存到长期记忆。模型比任何规则引擎更能判断「这条信息对未来有用」。（2）**统一的工具调用接口**：从模型视角看，`save_memory` 与其他工具（如读文件、搜索）没有区别，都是通过 tool_call 格式调用，不需要额外的特殊机制。（3）**自然语言描述**：保存的内容是模型用自然语言总结的关键信息，而非原始数据的机械复制，信息密度更高。（4）**透明可审计**：保存的记忆以 Markdown 文件形式存储，人类可以随时查看、编辑和管理。这种设计体现了「让 AI 管理 AI 的知识」的思想。
+**当前版本回答：** 有本地事件订阅。publish等待本地处理，publish_event把带路由事件排入渠道交付；本地状态不等待外部网络。队列不自动提供多实例状态一致性。
 
-**面试加分点：** 对比传统的「基于规则的记忆管理」（如按时间窗口自动保存）和 Nanobot 的「基于模型判断的记忆管理」，后者更智能更灵活。
+**源码依据：** [nanobot/bus/queue.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/queue.py)。
 
----
-
-### Q29. Nanobot 的 Channel 适配器模式是如何设计的？
-
-**答案：** Channel 适配器模式是 Nanobot 实现多平台接入的核心架构。设计如下：（1）**适配器接口**：定义统一的 Channel 接口，包括 `receive_message()`（接收消息）、`send_message()`（发送回复）等方法。（2）**具体实现**：每个平台（CLI、飞书、钉钉、Slack）有一个独立的 Channel 适配器实现，负责该平台的消息格式转换、认证鉴权、Webhook 处理等平台特定逻辑。（3）**消息标准化**：所有 Channel 适配器将平台特定格式的消息转换为 Nanobot 内部统一的消息格式，然后通过 MessageBus 传递给 AgentLoop。（4）**响应适配**：AgentLoop 的输出通过 MessageBus 传到对应 Channel 适配器，由适配器转换为平台特定格式发送。这种设计遵循「适配器模式（Adapter Pattern）」和「六边形架构（Hexagonal Architecture）」的思想，使核心 Agent 逻辑与外部平台完全解耦。
-
-**面试加分点：** 提到新增一个平台只需实现一个新的 Channel 适配器，不需要修改 AgentLoop 的任何代码，体现了开闭原则（OCP）。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q30. Nanobot 的「配置驱动组装」理念是什么？
+### Q23. 技能渐进披露怎样工作？
 
-**答案：** 「配置驱动组装」是 Nanobot 的核心设计理念之一，指通过配置文件而非硬编码来决定 Agent 的能力组合。具体体现为：（1）**`config.json` 驱动**：模型选择、API 密钥、MCP Server 列表、工具启用/禁用、系统提示词等全部在配置文件中声明。（2）**Skills 目录扫描**：将 `.nanobot/skills/` 目录下的 Markdown 文件自动识别为技能，无需修改代码即可扩展能力。（3）**Rules 动态加载**：`.nanobot/rules/` 目录下的规则文件会被自动注入到 system prompt 中，通过添加文件即可修改 Agent 行为。（4）**MCP 插件化**：通过配置 MCP Server 列表来「插拔」外部工具能力。这种设计的优势是：同一份 Nanobot 代码，通过不同配置可以组装出完全不同能力的 Agent——一个做代码助手、一个做客服机器人、一个做数据分析师。
+**当前版本回答：** 发现工作区、插件、内置技能并处理覆盖/禁用/依赖；构造always内容与其他摘要，支持显式技能上下文。它不等于每轮注入全部技能。
 
-**面试加分点：** 类比 Spring 框架的 IoC/DI 思想——组件的具体实现由配置决定而非代码硬编码。
+**源码依据：** [nanobot/agent/skills.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skills.py)。
 
----
-
-### Q31. Nanobot 如何利用 Prompt Cache 优化成本？
-
-**答案：** Prompt Cache 是大模型 API（如 Anthropic Claude）提供的缓存优化机制，Nanobot 利用它大幅降低 API 成本。原理如下：（1）**缓存命中**：当多次 API 调用的 prompt 前缀相同时，API 服务器可以复用之前的 KV Cache 计算结果，只对新增部分计算注意力，大幅减少计算量。（2）**Nanobot 的利用方式**：将相对稳定的内容（system prompt、工具定义、Skills 描述）放在 prompt 的前部，将变化的内容（最新用户消息、最近工具结果）放在后部。这样每次调用只有后部变化，前部可以命中缓存。（3）**成本节省**：缓存命中的 token 计费通常只有正常价格的 10%，在长会话中（system prompt 可能占总 token 的 30-50%）节省非常显著。（4）**ContextBuilder 的配合**：ContextBuilder 在组装上下文时会刻意保持前缀的稳定性，避免不必要的变动导致缓存失效。
-
-**面试加分点：** 能说出 Anthropic 的 Prompt Caching 具体计费规则：缓存写入有额外费用但缓存读取打折 90%，在多轮对话中投入产出比非常高。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q32. 请对比 Nanobot 与 LangChain 的核心区别
+### Q24. MCP怎样接入？
 
-**答案：** 两者在定位、设计哲学和适用场景上有显著区别：
+**当前版本回答：** 应用拥有MCPProvider和连接生命周期，共享ToolRegistry给Loop；Wrapper将Tools/Resources/Prompts等映射到本地契约，execute转给外部会话。
 
-| 维度 | Nanobot | LangChain |
-|------|---------|-----------|
-| 代码量 | ~4000 行 | 10万+ 行 |
-| 设计哲学 | 极简、透明、可读 | 全面、抽象、模块化 |
-| 抽象层次 | 低抽象，直接看到 API 调用 | 高抽象，多层封装 |
-| 学习曲线 | 低，源码可半天读完 | 高，概念和 API 众多 |
-| 扩展方式 | MCP 协议 + Skills 文件 | Chain/Agent/Tool 类继承 |
-| 生态整合 | 通过 MCP 生态 | 自有 LangSmith/LangGraph 生态 |
-| 适用场景 | 轻量级 Agent、学习研究、快速原型 | 大型复杂项目、企业级应用 |
-| 工具管理 | 渐进披露 + ToolRegistry | 全量注入 + 类定义 |
-| 记忆系统 | MemoryConsolidator 文件持久化 | 多种 Memory 类可选 |
+**源码依据：** [nanobot/agent/tools/mcp.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py)。
 
-核心区别在于：Nanobot 追求「让你理解 Agent 是怎么工作的」，LangChain 追求「让你快速搭建 Agent 应用」。
-
-**面试加分点：** 可以提到 LangChain 作者 Harrison Chase 自己也承认 LangChain 存在过度抽象的问题，并在 LangGraph 中简化了设计。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q33. 请对比 Nanobot 与 OpenClaw（开源 Agent 框架）的差异
+### Q25. max_tool_result_chars与上下文预算是什么关系？
 
-**答案：** OpenClaw 和 Nanobot 都是轻量级 Agent 框架，但设计思路有差异：（1）**架构风格**：Nanobot 采用单体架构，所有组件在同一进程中运行，通过类和函数组织；OpenClaw 更倾向于微服务化设计，各模块可以独立部署。（2）**工具生态**：Nanobot 深度集成 MCP 协议，直接复用 MCP 生态中的数千个工具服务器；OpenClaw 通常使用自定义的工具注册机制。（3）**记忆方案**：Nanobot 的 MemoryConsolidator 使用 LLM 进行记忆压缩和持久化，强调「AI 自管理」；OpenClaw 可能更依赖传统的数据库存储方案。（4）**多平台支持**：Nanobot 通过 Channel 适配器原生支持飞书、钉钉等国内平台；OpenClaw 可能需要额外开发适配层。（5）**社区规模**：Nanobot 有 37K+ stars 的活跃社区，文档和教程更丰富。选型建议：学习理解 Agent 原理选 Nanobot，需要微服务化部署选 OpenClaw。
+**当前版本回答：** AgentDefaults中当前默认16000字符，是工具文本相关限制而非Token窗口。还需ContextGovernor区分历史、未接收工具输出与摘要/预算错误。
 
-**面试加分点：** 面试中框架对比题不要「踩一捧一」，而应该客观分析各自的适用场景。
+**源码依据：** [nanobot/config/schema.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/config/schema.py)。
 
----
-
-### Q34. 基于 Nanobot 学习，简历上可以写哪些项目？
-
-**答案：** 基于 Nanobot 的学习和实践，可以提炼出以下简历项目方向：（1）**Agent 框架源码研究项目**：深入阅读 Nanobot 4000 行源码，理解 AgentLoop、MemoryConsolidator、ToolRegistry 等核心模块的设计与实现，可以展示底层原理理解能力。（2）**自定义 MCP 工具服务器**：基于 MCP 协议开发特定领域的工具服务器（如 MySQL 查询工具、Jira 集成工具），展示协议理解和工程能力。（3）**多平台 AI 助手**：基于 Nanobot 的 Channel 适配器开发飞书/钉钉机器人，展示系统集成能力。（4）**Agent 评测平台**：设计评测用例并对 Nanobot Agent 进行系统化评测，展示测试和分析能力。（5）**记忆系统优化**：对 MemoryConsolidator 进行改进（如加入向量检索），展示创新能力。
-
-**面试加分点：** 简历中最好写「基于开源项目二次开发」而非「使用了某框架」，前者更能展示深度。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q35. Nanobot 的 4000 行代码中，哪些设计模式值得学习？
+### Q26. 会话锁保护什么？
 
-**答案：** Nanobot 虽然代码量小但包含了丰富的设计模式：（1）**注册表模式（Registry Pattern）**：ToolRegistry 统一管理工具的注册和查找；（2）**适配器模式（Adapter Pattern）**：Channel 适配器将不同平台的消息格式适配为统一接口；（3）**建造者模式（Builder Pattern）**：ContextBuilder 逐步构建复杂的上下文对象；（4）**观察者模式（Observer Pattern）**：MessageBus 实现消息的发布-订阅；（5）**策略模式（Strategy Pattern）**：不同的模型提供商（Claude/GPT）通过统一接口调用；（6）**单例模式（Singleton-like）**：配置管理和锁管理使用字典实现的全局状态；（7）**模板方法模式（Template Method）**：AgentLoop 定义了执行框架，具体步骤由子组件实现；（8）**外观模式（Facade Pattern）**：对外暴露简洁的 API，内部组合多个复杂组件。这些模式的运用使代码简洁但具备良好的扩展性。
+**当前版本回答：** 正常同会话调度/状态衔接，另有命令与输入注入路径。会话身份不同于用户身份，不能一概称同一用户所有输入完全串行。
 
-**面试加分点：** 能用 SOLID 原则逐一分析 Nanobot 的设计，说明它如何满足单一职责、开闭原则、依赖倒置等。
+**源码依据：** [nanobot/agent/loop.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q27. 请求并发gate如何配置？
+
+**当前版本回答：** NANOBOT_MAX_CONCURRENT_REQUESTS为正数时创建Semaphore，否则不创建这层gate。默认不是固定3，也不代表没有其他容量限制。
+
+**源码依据：** [nanobot/agent/loop.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q28. 当前长期记忆是否靠Runner统一拦截save_memory？
+
+**当前版本回答：** 不是该版本的通用工具路径。记忆文件、归档摘要、Dream与专门工具上下文有不同职责，不能把旧虚拟工具示意当当前Runner实现。
+
+**源码依据：** [nanobot/agent/memory.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q29. Channel适配器如何组织？
+
+**当前版本回答：** 自包含包由manifest/config/runtime和可选连接界面/测试组成；BaseChannel基本start/stop/send，输入映射InboundMessage，输出经交付策略。
+
+**源码依据：** [nanobot/channels/base.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/base.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q30. 配置如何驱动运行？
+
+**当前版本回答：** config.json经Pydantic与loader解析，Provider路由/工厂和应用组装据此创建运行组件。${VAR}不是shell默认值语法，无效配置不默默重置。
+
+**源码依据：** [nanobot/config/loader.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/config/loader.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q31. Prompt Cache能保证什么？
+
+**当前版本回答：** 稳定请求前缀可能有利于缓存，但模型服务、协议字段、项目/压缩变化与实际用量决定命中。不能据system排前面承诺90%提速或固定省费。
+
+**源码依据：** [nanobot/agent/context.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q32. 怎样与其他Agent框架比较？
+
+**当前版本回答：** 固定双方版本与任务，比较执行、状态、安全、协议和验证方式；不从旧行数/星数推断易学、快慢或可靠性。当前结论先限于已读Nanobot路径。
+
+**源码依据：** [docs/architecture.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/architecture.md)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q33. 怎样避免未经核实的框架对比？
+
+**当前版本回答：** 明确比较指标、版本、任务和实验；没核对对方代码时不宣称其架构或性能。本章只给本地Nanobot证据，不替其他框架猜当前实现。
+
+**源码依据：** [docs/architecture.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/architecture.md)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q34. 学习经历怎样写进简历？
+
+**当前版本回答：** 描述实际阅读的版本、调用图、调试和测试分析；未开发功能不写独立实现，未测量不填性能数字。说明上游原有能力与个人贡献。
+
+**源码依据：** [docs/architecture.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/architecture.md)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q35. 哪些设计值得学？
+
+**当前版本回答：** 关注轮次与模型循环分离、参数契约、注册与适配、状态owner、事件交付、安全边界。以真实数据流解释，不靠4000行覆盖工业能力的口号。
+
+**源码依据：** [docs/architecture.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/architecture.md)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -327,11 +371,13 @@
 
 ---
 
-### Q37. MCP 的 Host、Client、Server 三角架构是什么？
+### Q37. Host、Client、Server如何对应本项目？
 
-**答案：** MCP 采用三层架构：（1）**Host（宿主）**：面向用户的 AI 应用，如 Claude Desktop、Cursor IDE、Nanobot 等。Host 是用户直接交互的界面层，负责管理 MCP Client 实例。（2）**Client（客户端）**：由 Host 内部维护，每个 Client 与一个 Server 建立一对一连接。Client 负责协议通信——发送请求、接收响应、管理连接生命周期。一个 Host 可以有多个 Client，每个连接一个不同的 Server。（3）**Server（服务器）**：提供具体能力（工具、数据、提示词模板）的服务进程。每个 Server 专注于一个特定领域，如文件系统 Server 提供读写文件能力，GitHub Server 提供仓库操作能力。Server 暴露标准化的 MCP 接口，不关心调用方是什么应用。这种三层分离使得 Host、Client、Server 各自独立演化。
+**当前版本回答：** Host是应用运行环境而不仅是UI；应用持有ClientSession等连接并管理生命周期，Server提供协议能力。当前MCPProvider在应用侧管理这些资源。
 
-**面试加分点：** 画出三角架构图，标注通信方向——Host 管理 Client，Client 与 Server 1:1 通信，Server 之间相互独立。
+**源码依据：** [nanobot/agent/tools/mcp.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -362,11 +408,13 @@
 
 ---
 
-### Q40. Skill、Function Calling、MCP Tool 三者有什么关系和区别？
+### Q40. Skill、Function Calling、MCP是什么关系？
 
-**答案：** 三者处于不同的抽象层次：（1）**Function Calling**：模型输出层面的格式标准，定义了模型如何通过结构化 JSON 表达「我想调用某个工具」的意图。它本身不执行任何操作。（2）**MCP Tool**：运行时服务层面的工具实例，通过 MCP 协议暴露给客户端。一个 MCP Tool 包含完整的定义（名称、描述、参数 Schema）和实际的执行逻辑。MCP Tool 的参数格式复用了 Function Calling 的 JSON Schema 标准。（3）**Skill（Nanobot 特有概念）**：知识层面的能力封装，是一个 Markdown 文件，包含任务描述、操作步骤、提示词模板等。Skill 不是工具本身，而是「如何使用一组工具完成特定任务」的知识。Skill 可能引导 Agent 去调用 MCP Tools 或 Function Calling。关系链为：Skill 描述「做什么」→ Agent 通过 Function Calling 格式表达「调用哪个工具」→ MCP Tool 实际「执行操作」。
+**当前版本回答：** Skill是说明/资源且不属于Nanobot独有概念；模型工具调用表达意图；MCP提供外部能力协议。Schema复用JSON Schema不等于两个协议完全相同。
 
-**面试加分点：** 可以类比为：Skill 是菜谱，Function Calling 是点菜的标准格式，MCP Tool 是厨房里的厨具。
+**源码依据：** [nanobot/agent/tools/mcp.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -378,11 +426,13 @@
 
 ---
 
-### Q42. MCP 的传输层有哪些选项？各自适用什么场景？
+### Q42. 当前支持哪些MCP传输配置？
 
-**答案：** MCP 支持三种传输方式：（1）**stdio（标准输入/输出）**：Client 启动 Server 作为子进程，通过 stdin/stdout 管道通信。优点是部署简单、不需要网络配置；适用于本地单用户场景。Nanobot 默认使用这种方式。（2）**HTTP + SSE（Server-Sent Events）**：Client 通过 HTTP POST 发送请求，Server 通过 SSE 推流返回结果。优点是支持远程访问、穿越防火墙、兼容现有 Web 基础设施；适用于远程 Server 和多用户共享场景。（3）**Streamable HTTP**：MCP 规范 2025 年新增的传输方式，基于标准 HTTP 语义实现双向流式通信，是对 HTTP+SSE 的改进方案，更适合现代云原生架构。三者的选择原则是：本地开发用 stdio 最简单，生产部署用 HTTP+SSE 或 Streamable HTTP。传输层对上层的 MCP 消息格式完全透明。
+**当前版本回答：** MCPServerConfig.type支持stdio、sse、streamableHttp。选型按服务能力与运行边界，SDK运行参数拼写另行核对。stdio仍需序列化，不保证任何场景性能最好。
 
-**面试加分点：** 能解释为什么 stdio 方式性能最好——没有网络开销和序列化开销，直接内存管道通信。
+**源码依据：** [nanobot/config/schema.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/config/schema.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -492,11 +542,13 @@
 
 ---
 
-### Q56. 什么是「Lost in the Middle」问题？如何缓解？
+### Q56. 长上下文信息利用问题怎样对应工程？
 
-**答案：** 「Lost in the Middle」是 Liu et al. (2023) 发现的现象：当相关信息被放在长上下文的中间位置时，模型的利用效果显著下降，而放在开头或结尾时效果最好。这形成了一个「U 形曲线」——模型对首尾信息的关注度明显高于中间。原因分析：（1）注意力机制在长序列中的分布不均匀，首尾 token 天然获得更多关注（位置偏差）。（2）训练数据中重要信息通常出现在文本的开头或结尾（数据偏差）。缓解策略包括：（1）将最重要的信息放在 prompt 的开头和结尾；（2）使用检索增强时将最相关的文档放在最前面；（3）使用 sliding window attention 等注意力改进方案；（4）在 Nanobot 中，ContextBuilder 将 system prompt 放在最前面、最新消息放在最后面，就是遵循这一原则。
+**当前版本回答：** 相关信息位置可能影响特定模型和任务表现，但不能据此给源码顺序编造唯一理论动机。当前ContextBuilder组合来源，ContextGovernor控制预算，需要实际任务评估。
 
-**面试加分点：** 这是解释 Nanobot 为何将 system prompt 和工具定义放在前面、用户消息放在后面的直接理论依据。
+**源码依据：** [nanobot/agent/context_governance.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context_governance.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -559,11 +611,13 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 ---
 
-### Q63. Decoder-only 和 Encoder-Decoder 架构各自适合什么任务？
+### Q63. 模型架构与Provider协议有何区别？
 
-**答案：** （1）**Decoder-only**（GPT 系列、LLaMA、Claude）：自回归生成，每个 token 只能看到之前的 token（因果注意力掩码）。优势是：预训练目标简单统一（next-token prediction），在超大规模时涌现出强大的通用能力。适合：开放式文本生成、对话、代码生成等生成任务。目前 LLM 的绝对主流。（2）**Encoder-Decoder**（T5、BART）：Encoder 对输入进行双向编码，Decoder 自回归生成输出。优势是 Encoder 可以双向看全文，对输入理解更充分。适合：翻译、摘要、问答等有明确输入-输出映射的任务。（3）为什么 Decoder-only 成为主流？Scaling Laws 研究表明，在相同计算量下 Decoder-only 的 loss 下降更稳定、更可预测。此外，统一的生成范式简化了工程实现，且通过 in-context learning 可以适配几乎所有下游任务。
+**当前版本回答：** Decoder-only与Encoder-Decoder是模型结构分类，Provider负责请求响应适配。不能由兼容接口推断闭源服务内部架构，也不是Nanobot要求统一某种网络结构。
 
-**面试加分点：** 能结合实际项目经验说明 Decoder-only 架构的优势——如 Nanobot 接入的 LLM 几乎都是 Decoder-only 架构。
+**源码依据：** [nanobot/providers/base.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/providers/base.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -759,123 +813,153 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 ## 六、Nanobot 源码与设计深度题（Q86-Q100）
 
-### Q86. Nanobot 的 AgentRunner 如何控制迭代次数？为什么主 Agent 是 40 次而子 Agent 是 15 次？
+### Q86. Runner迭代预算怎样控制？
 
-**答案：** max_iterations 参数控制 Agent 在单次对话中最多执行的工具调用轮数。主 Agent 默认 40 次，允许完成复杂的多步任务（如代码重构涉及读取多个文件、分析、逐一修改、测试）。子 Agent 限制为 15 次，防止后台任务过度消耗资源——子 Agent 通常执行范围明确的子任务，不需要太多轮次。设计体现了「主从权责分离」原则：主 Agent 拥有更大的行动自由度承担复杂编排，子 Agent 以精简执行为目标。如果子 Agent 也允许 40 次迭代且不受限，多个并发子 Agent 可能导致 API 费用失控。
+**当前版本回答：** AgentRunSpec.max_iterations与继续回调共同参与循环条件；主/子默认来自配置（当前maxToolIterations=200），还有followup、Goal、重试与长度恢复，不能背主40/子15。
 
-**面试加分点：** 能提到 max_iterations 是在 AgentRunner 的主循环中递减检查的，到达上限后 Agent 会生成最终回复而非继续调用工具。
+**源码依据：** [nanobot/agent/runner.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py)。
 
----
-
-### Q87. MemoryConsolidator 的触发条件是什么？合并失败怎么办？
-
-**答案：** 当 estimate_prompt_tokens_chain 估算的当前对话 token 数超过 context_window_tokens 配置值时，MemoryConsolidator 被触发。合并流程通过 save_memory 虚拟工具执行——LLM 被要求生成 history_entry（时间戳摘要追加到 HISTORY.md）和 memory_update（新 MEMORY.md 全文）。如果 LLM 连续 3 次未能正确调用 save_memory 工具（比如生成了普通文本而非工具调用），系统进入 Raw Archive 模式：将原始消息 JSON 直接写入 HISTORY.md 文件，防止对话历史数据丢失。这种降级策略体现了「故障安全」设计原则——宁可保存格式不优雅的原始数据，也不丢失信息。
-
-**面试加分点：** 能提到 tool_choice 参数在记忆合并时被设为强制调用 save_memory，失败后回退到 auto 模式，展示了渐进降级策略。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q88. MCPToolWrapper 如何将 MCP 工具 schema 转换为 OpenAI 格式？
+### Q87. 压缩触发与失败怎样理解？
 
-**答案：** _normalize_schema_for_openai 方法处理 MCP 与 OpenAI Function Calling 之间的 JSON Schema 差异：（1）**nullable union 类型简化**：MCP 中 `{"type": ["string", "null"]}` 被转换为 `{"type": "string"}`，因为 OpenAI 不支持类型数组。（2）**anyOf/oneOf 扁平化**：将复杂的联合类型简化为第一个非 null 类型。（3）**空 schema 填充**：如果 MCP 工具未定义参数 schema，自动填充 `{"type": "object", "properties": {}}` 的默认结构，避免 OpenAI API 报错。工具名使用 `mcp_{server}_{tool}` 格式命名，确保多个 MCP Server 的工具名不冲突。这个转换层是 Nanobot 支持 MCP 生态的关键适配器。
+**当前版本回答：** 看请求预算、历史边界与摘要协调；错误需要维持可回放一致性。不用固定50条或90%阈值替代当前分支。
 
-**面试加分点：** 能提到这种 schema 转换是有损的——复杂的 MCP schema 可能丢失精度，这也是为什么 MCP 工具的参数设计应尽量保持简单。
+**源码依据：** [nanobot/agent/context_governance.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context_governance.py)。
 
----
-
-### Q89. Nanobot 的并发控制机制是怎样的？
-
-**答案：** 三层并发控制：（1）**_session_locks**：每个 session_key 对应一把 asyncio.Lock，确保同一会话内的消息串行处理，防止两条并发消息同时读写会话历史导致数据损坏。（2）**_concurrency_gate**：asyncio.Semaphore（默认值 3），限制跨会话的并发 LLM 请求数量，防止同时发起过多 API 调用导致速率限制或费用暴增。（3）**_active_tasks**：Dict[session_key, asyncio.Task] 映射，记录每个会话当前正在执行的任务，支持 `/stop` 命令通过 task.cancel() 取消正在进行的 Agent 循环。三层控制分别解决数据一致性、资源保护和用户控制三个不同维度的并发问题。
-
-**面试加分点：** 能解释为什么用 asyncio.Lock 而非 threading.Lock——Nanobot 是单线程事件循环架构，asyncio 原语与其异步模型天然匹配。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q90. ContextBuilder 如何优化 Prompt Caching？
+### Q88. MCPToolWrapper如何处理Schema和结果？
 
-**答案：** ContextBuilder 将 system prompt 分为静态部分和动态部分：静态部分包括 Agent Identity（AGENTS.md 内容）、Bootstrap 文件、Memory（MEMORY.md + HISTORY.md）、Skills 摘要目录；动态部分包括当前时间戳、channel/chat_id 等信息，这些被放在 user 消息侧而非 system prompt 中。静态部分不含任何随时间变化的信息（如时间戳），这样每次请求的 system prompt 前缀保持不变，利于 LLM Provider 侧的 Prompt Cache 命中——Provider 可以复用已缓存的 KV Cache 前缀，显著降低首 token 延迟和计算成本（Anthropic 的 Prompt Caching 可节省约 90% 的输入 token 费用）。
+**当前版本回答：** 输入来自inputSchema并经规范化，调用由execute转给ClientSession；名称会清理，isError和渲染失败有结构化返回。不要无条件删除所有additionalProperties。
 
-**面试加分点：** 能提到 Anthropic 的 cache_control 标记和 OpenAI 的自动 Prompt Caching 机制的区别——前者需要显式标记缓存点，后者自动匹配最长公共前缀。
+**源码依据：** [nanobot/agent/tools/mcp.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py)。
 
----
-
-### Q91. Skills 的渐进披露（Progressive Disclosure）机制如何工作？
-
-**答案：** 三层结构：**Tier1**——摘要目录注入 system prompt，每个 Skill 只包含名称、描述和触发条件（几十个 token），让 Agent 知道有哪些能力可用。**Tier2**——当 Agent 判断某个 Skill 与当前任务相关时，通过 read_file 工具读取 SKILL.md 全文，获取完整的指令和模板。**Tier3**——Skill 中引用的 scripts、references 等附加资源，按需进一步读取。特殊情况：`always: true` 的 Skill 直接全文注入 system prompt（跳过 Tier1 的摘要阶段）。这种设计在「Agent 的全面能力感知」和「上下文窗口节省」之间取得了平衡——10 个 Skill 的摘要可能只占 500 token，而全文可能需要 5000+ token。
-
-**面试加分点：** 能对比 LangChain 的 Tool 注册方式（全量注入 tool description）与 Nanobot 渐进披露的效率差异。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q92. Nanobot 如何防止子 Agent 无限递归？
+### Q89. 并发有哪些层？
 
-**答案：** SubagentManager 在创建子 Agent 时实施两道防线：（1）**工具剥离**：子 Agent 的工具集中移除了 MessageTool（发消息给用户）和 SpawnTool（创建新子 Agent），这使得子 Agent 无法与用户直接通信，也无法再 spawn 新的子代理，从架构层面切断了递归链条。（2）**迭代硬限制**：子 Agent 的 max_iterations 固定为 15 次（远低于主 Agent 的 40 次），即使子 Agent 陷入低效循环，也会在 15 轮后强制停止。两道防线相互独立——即使工具剥离被某种方式绕过（理论上不可能，因为是代码级检查），迭代限制仍然生效。这体现了纵深防御原则。
+**当前版本回答：** 会话协调、可选请求gate、子任务slots、工具批次和SessionState各保护不同对象。对象复用不等于历史共享。
 
-**面试加分点：** 能对比 AutoGen 等框架中子 Agent 可以相互调用导致的递归风险，说明 Nanobot 的设计更安全。
+**源码依据：** [nanobot/agent/loop.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py)。
 
----
-
-### Q93. ChannelManager 的出站消息处理策略？
-
-**答案：** 三个关键策略：（1）**_stream_delta 合并降频**：LLM 的流式输出可能每几个 token 就产生一次 delta，如果每次都推送给前端会造成网络开销过大。ChannelManager 在短时间窗口内合并多个 delta 再统一发送，改善用户的流式阅读体验。（2）**元数据过滤**：_progress 和 _tool_hint 等内部元数据消息根据 Channel 配置决定是否转发给用户——CLI 模式可能展示全部调试信息，而 Telegram 模式只展示最终结果。（3）**发送失败重试**：当消息发送失败时（如网络波动），采用指数退避重试（1s → 2s → 4s → ...），避免在网络恢复前大量重试请求堆积。
-
-**面试加分点：** 能提到不同 Channel（Telegram/Discord/CLI）的消息格式差异——如 Telegram 有消息长度限制需要分段发送。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q94. _TOOL_RESULT_MAX_CHARS (16000) 设计目的？
+### Q90. 上下文与缓存有什么联系？
 
-**答案：** 这个常量限制了单次工具调用返回结果的最大字符数，保护上下文窗口不被单次工具返回撑满。例如 exec 工具执行 `cat large_file.txt` 可能返回数十万字符，如果全部注入对话历史，会快速耗尽上下文窗口并导致后续轮次的 API 费用暴增。截断在 hook/loop 层统一执行，对所有工具（read_file、exec、web_fetch 等）一视同仁。截断后的结果会附带提示告知 Agent 输出已被截断，Agent 可以通过 read_file 的 offset/limit 参数分页获取完整内容。16000 字符大约对应 4000-5000 token，在 128K 窗口中占比约 3-4%，是「信息量充足」和「窗口保护」之间的合理平衡点。
+**当前版本回答：** 指令、历史、工具定义和运行时材料会影响实际请求前缀。缓存需服务商支持与测量，不能从拼接顺序推出固定节省比例。
 
-**面试加分点：** 能提到这个设计与 Cursor IDE 等工具的做法类似——工具输出太长时截断并提示，而非无限注入。
+**源码依据：** [nanobot/agent/context.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py)。
 
----
-
-### Q95. Nanobot 的 Provider 注册机制如何实现？
-
-**答案：** PROVIDERS 全局注册表模式。系统维护一个 Provider 名称到实现类的字典映射（registry.py）。新增 Provider 只需两步：（1）在 registry.py 中添加类映射（如 `"deepseek": DeepSeekProvider`）；（2）在 schema.py 中添加对应的配置字段定义。运行时根据 config.json 中的 provider 字段查找注册表，实例化对应的 Provider 类。支持 `auto` 模式：系统按优先级依次检测环境变量中是否存在各 Provider 的 API Key，自动选择第一个可用的 Provider。这种注册表模式使得扩展新 Provider 无需修改核心代码，符合开闭原则。
-
-**面试加分点：** 能对比 LangChain 的 Provider 集成方式——LangChain 为每个 Provider 单独发布 pip 包（如 langchain-openai），而 Nanobot 内置所有 Provider 保持轻量。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q96. save_memory 虚拟工具的设计意义？
+### Q91. 技能来源和覆盖顺序是什么？
 
-**答案：** 将记忆合并操作包装为工具调用而非硬编码逻辑，核心意义在于：让 LLM 自主决定记忆的内容和格式。LLM 通过 save_memory 工具传入两个参数：history_entry（一段时间戳 + 摘要文本，追加到 HISTORY.md）和 memory_update（新版 MEMORY.md 的完整内容）。这样 LLM 可以基于对话上下文智能决定哪些信息值得长期记忆、如何组织和压缩信息。执行时通过 tool_choice 参数强制 LLM 必须调用 save_memory（而非生成普通文本），失败时回退到 `tool_choice: auto` 给 LLM 更多自由度。这种「LLM 驱动的记忆管理」比规则化的摘要算法更灵活，能保留对用户最有价值的信息。
+**当前版本回答：** 工作区同名项优先，加入启用插件，再补未覆盖内置；禁用/别名/依赖和snapshot共同影响实际可用项。
 
-**面试加分点：** 能对比传统的记忆管理方案（如 LangChain 的 ConversationSummaryMemory 使用固定模板摘要）与 Nanobot 方案的灵活性差异。
+**源码依据：** [nanobot/agent/skills.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skills.py)。
 
----
-
-### Q97. InboundMessage 的 session_key 机制？
-
-**答案：** 默认 session_key 格式为 `f"{channel}:{chat_id}"`，用于隔离不同来源的会话上下文。例如 Telegram 中的不同聊天窗口、Discord 中的不同频道各自维护独立的对话历史和记忆。session_key_override 允许自定义 session_key，实现更灵活的会话隔离策略：（1）**线程隔离**：在同一个群聊中，不同话题线程使用不同 session_key，避免话题串扰；（2）**子会话**：主对话中临时创建一个隔离的子会话处理特定任务，完成后回到主会话；（3）**跨 Channel 共享**：让 Telegram 和 Discord 的同一个用户共享同一个 session_key，实现跨平台的连续对话体验。
-
-**面试加分点：** 能关联到 _session_locks 的设计——session_key 不仅用于数据隔离，还用于并发控制（同一 session_key 的请求串行处理）。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q98. Nanobot 的 exec 工具有哪些安全防护？
+### Q92. 子任务怎样防止资源失控？
 
-**答案：** 五层安全防护：（1）**restrict_to_workspace**：exec 工具的工作目录（cwd）被强制设置为 workspace 路径，命令只能在沙箱内执行。（2）**危险命令模式拒绝**：使用正则表达式匹配危险模式（如 `rm -rf /`、`mkfs`、`curl ... | bash`），在执行前直接拒绝。（3）**SSRF 防护**：web_fetch 工具阻止访问私有 IP 地址（10.x、172.16-31.x、192.168.x）和云元数据地址（169.254.169.254），防止 Agent 被注入访问内网。（4）**路径白名单检查**：文件操作工具验证目标路径是否在 workspace 范围内，防止路径遍历攻击（如 `../../etc/passwd`）。（5）**异步执行**：通过 asyncio.create_subprocess_shell 异步执行命令，配合超时控制防止命令无限运行。
+**当前版本回答：** 看配置并发、迭代、活动/收件箱容量、owner和接纳规则。不能用一个虚构is_subagent固定15的构造函数概括。
 
-**面试加分点：** 能指出这些防护都是代码级硬限制——即使 LLM 被 Prompt 注入操纵，也无法绕过这些安全检查。
+**源码依据：** [nanobot/agent/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py)。
 
----
-
-### Q99. 如何评价 Nanobot 用 Markdown 文件（MEMORY.md）做长期记忆的设计？
-
-**答案：** **优点**：（1）人类可读可编辑——用户可以直接打开 MEMORY.md 查看和修改 Agent 的记忆，透明度极高。（2）版本控制友好——Markdown 文件可以用 Git 追踪变更历史，方便回溯和审计。（3）无外部依赖——不需要向量数据库或其他基础设施，降低部署复杂度。（4）与 LLM 天然兼容——Markdown 是 LLM 预训练数据中最常见的格式之一。**缺点**：（1）不支持语义检索——无法根据语义相似度查找相关记忆，只能全文注入。（2）大量记忆时效率低——记忆内容增长后，每次对话都需要注入全文，消耗大量上下文窗口。（3）缺乏结构化查询——无法像数据库那样按条件过滤和聚合。适合个人助手场景（记忆量有限），企业级场景需要配合向量库或知识图谱扩展。
-
-**面试加分点：** 能提出改进方案——如将 MEMORY.md 分为多个主题文件，Agent 按需加载相关主题，减少全文注入的开销。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q100. 如果让你扩展 Nanobot 支持多用户，需要改造哪些模块？
+### Q93. 出站交付策略在哪里？
 
-**答案：** 五个核心改造点：（1）**SessionManager 增加用户维度隔离**：当前 session_key 基于 channel:chat_id，需要增加 user_id 维度，确保同一个群聊中不同用户的对话上下文相互隔离。（2）**Memory 按用户分目录**：将 memory/MEMORY.md 改为 memory/{user_id}/MEMORY.md，每个用户维护独立的长期记忆。（3）**权限系统**：引入用户-工具 ACL（访问控制列表），不同用户可使用不同的工具集——管理员可以用 exec，普通用户只能用 read_file 和 web_search。（4）**Provider 层增加用量追踪与限流**：按用户记录 API 调用次数和 token 消耗，设置每用户的配额上限，防止单个用户耗尽团队预算。（5）**MessageBus 增加用户路由标签**：出站消息需要标记目标用户，确保 Agent 的回复发送给正确的用户。
+**当前版本回答：** ChannelManager、outbox、渠道send契约协调发送/重试；WebUIOutboundDelivery拥有其投影/流状态。不同平台策略不能统一描述为每100字符flush。
 
-**面试加分点：** 能提到多用户场景下 Prompt Caching 的挑战——不同用户的 system prompt（包含各自 Memory）不同，缓存命中率会下降。
+**源码依据：** [nanobot/channels/manager.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/manager.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q94. 字符限制是否等于Token预算？
+
+**当前版本回答：** 不等于。工具结果字符、模型窗口、输出maxTokens和上下文治理是不同层，实际请求要同时满足相关约束。
+
+**源码依据：** [nanobot/agent/context_governance.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context_governance.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q95. Provider怎样注册和创建？
+
+**当前版本回答：** registry维护ProviderSpec元数据，routing解析/校验，factory创建兼容或专用实例；服务不必各有同名py文件，新增行为也不总是只加字典项。
+
+**源码依据：** [nanobot/providers/factory.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/providers/factory.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q96. 为什么不能套用旧save_memory虚拟工具？
+
+**当前版本回答：** 当前长期资料与摘要/Dream的职责不同，普通Runner不按旧示例统一拦截。应跟真实工具集合和当前调用路径。
+
+**源码依据：** [nanobot/agent/memory.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q97. session_key怎样产生？
+
+**当前版本回答：** InboundMessage使用可信override或channel:chat_id，运行时还会处理unified_session/命名空间。不能随意追加线程字符串或把用户ID当唯一会话。
+
+**源码依据：** [nanobot/session/keys.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/keys.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q98. exec有哪些边界？
+
+**当前版本回答：** 命令过滤、工作区、运行时间/输出、进程管理、OS沙箱与环境控制分别作用。cwd和正则不是完备隔离，Windows后端与Linux不同。
+
+**源码依据：** [nanobot/agent/tools/shell.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/shell.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q99. 为什么长期资料可用Markdown而会话用SQLite？
+
+**当前版本回答：** 可读编辑的少量资料与结构化历史/事务是不同需求。当前MemoryStore配合journal和Dream，SessionState管理SQLite，不能笼统说所有记忆无数据库。
+
+**源码依据：** [nanobot/session/state.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/state.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+
+---
+
+### Q100. 多用户隔离要看哪些边界？
+
+**当前版本回答：** 身份、配置实例、会话命名空间、项目授权、凭据与共享管理面都需明确。渠道allowlist或会话键不同不自动提供独立租户隔离。
+
+**源码依据：** [docs/webui.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/webui.md)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -975,19 +1059,23 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 ## 八、多智能体（Q111-Q118）
 
-### Q111. 单 Agent 的瓶颈在哪里？
+### Q111. 单Agent是否必然串行执行所有工具？
 
-**答案：** 单 Agent 面临多个瓶颈：（1）**上下文窗口限制**：复杂任务需要大量的工具调用结果、中间推理、历史记录，单 Agent 的上下文很快被耗尽，即使有记忆压缩也会损失信息。（2）**能力冲突**：一个 Agent 需要同时扮演规划者、执行者、评估者等多个角色，system prompt 变得冗长且矛盾。（3）**错误累积**：单 Agent 的每一步错误都会影响后续步骤，长链条任务中错误概率随步骤数指数增长。（4）**并行受限**：单 Agent 顺序执行步骤，无法并行处理多个独立子任务。（5）**专业性不足**：通用 Agent 在特定领域（如代码审查、数据分析）的能力不如专门优化的 Agent。（6）**调试困难**：单 Agent 的行为链条长且复杂，出问题时难以定位是规划错误还是执行错误。
+**当前版本回答：** 不是。工具批次可按安全属性并发，子任务又是另一层任务分解。长上下文、角色冲突与错误传播等是可能挑战，不是所有系统都必然相同。
 
-**面试加分点：** 能提到 Nanobot 通过 SubagentManager 实现子 Agent 来突破单 Agent 瓶颈，每个子 Agent 有独立上下文和明确职责。
+**源码依据：** [nanobot/agent/tools/execution.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/execution.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q112. 多 Agent 协作的核心收益是什么？
+### Q112. 多Agent收益是否自动成立？
 
-**答案：** 多 Agent 协作带来以下收益：（1）**分治复杂度**：将复杂任务分解给多个专业化 Agent，每个 Agent 只需处理自己擅长的子任务，降低单个 Agent 的认知负担。（2）**并行加速**：独立的子任务可以分配给不同 Agent 同时执行，缩短整体耗时。如代码审查 + 测试用例生成可以并行。（3）**专业化**：每个 Agent 可以有定制的 system prompt、工具集和知识库，专注于特定领域达到更好的效果。（4）**容错性**：单个 Agent 失败不会导致整个系统崩溃，Orchestrator 可以重试或分配给其他 Agent。（5）**可扩展性**：新增能力只需添加新的 Worker Agent，不影响现有系统。（6）**质量保证**：可以设置专门的评估 Agent 对其他 Agent 的输出进行质量检查，实现「四眼原则」。
+**当前版本回答：** 分工和并行可能有益，也有上下文重复、协调和错误成本。当前子任务有状态与结果交付边界，速度、成功率和容错仍需实测。
 
-**面试加分点：** 用 Nanobot 的例子——主 Agent 将「探索代码库」和「执行测试」分配给不同子 Agent 并行执行。
+**源码依据：** [nanobot/agent/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -1023,19 +1111,23 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 ---
 
-### Q117. 多 Agent 系统如何保证一致性？
+### Q117. 多Agent共享状态怎样保持一致？
 
-**答案：** 一致性是指多个 Agent 的行为和输出不相互矛盾，这在分布式系统中是经典难题。保证策略包括：（1）**共享上下文**：关键事实和约束通过共享的知识库或配置传递给所有 Agent，确保基础认知一致。（2）**全局约束注入**：在每个 Agent 的 system prompt 中注入统一的约束条件和规范，如「使用简体中文」「代码风格遵循 PEP 8」等。（3）**冲突检测**：Boss/Orchestrator 在汇总 Worker 输出时检测矛盾（如一个 Agent 建议用 MySQL，另一个建议用 PostgreSQL），要求矛盾方协调。（4）**事务性操作**：对共享资源（如文件系统、数据库）的修改使用锁或事务机制，防止并发冲突。Nanobot 的 `session_locks` 就是这种机制。（5）**版本控制**：对共享状态使用版本号，Agent 修改前检查版本是否过期，过期则重新读取最新状态。
+**当前版本回答：** 区分模型输出是否矛盾、会话数据一致性与外部副作用。会话协调和SessionState保护自己的边界，不自动为任意文件/API建立跨任务事务。共享约束Prompt也不等于数据锁。
 
-**面试加分点：** 类比分布式系统的 CAP 定理——多 Agent 也面临一致性（Consistency）和可用性（Availability）的权衡。
+**源码依据：** [nanobot/session/state.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/state.py)。
+
+**自查：** 区分源码事实、设计选项、模拟验证与真实运行。
 
 ---
 
-### Q118. 多 Agent 系统的调试有哪些难点和技巧？
+### Q118. 怎样调试不确定的多任务系统？
 
-**答案：** 多 Agent 调试是公认的难题，主要难点和应对技巧包括：（1）**因果链追踪难**：一个 Agent 的错误可能是因为上游 Agent 传递了错误信息。技巧：为每个 Agent 的每次执行生成 trace ID，串联完整的因果链。（2）**不确定性**：LLM 的非确定性输出使得同样的输入可能产生不同的 Agent 行为，bug 难以复现。技巧：固定 temperature=0 和 random seed 来增加可复现性。（3）**状态空间爆炸**：多个 Agent 的状态组合呈指数增长。技巧：用日志记录每个 Agent 在每个 decision point 的输入和输出。（4）**性能瓶颈定位**：延迟可能来自某个 Agent 的 LLM 调用、某个工具的执行、或 Agent 间的通信。技巧：用分布式 tracing 工具（如 Jaeger、LangSmith）可视化时间线。（5）**单元测试困难**：Agent 的行为依赖上下文，难以隔离测试。技巧：mock LLM 响应，用确定性的模拟替代非确定性的模型调用。
+**当前版本回答：** 记录版本、任务/会话身份、请求与工具结果，Mock模型并用Event控制时序。temperature=0或seed不保证所有服务逐字确定；没有提供这些参数的服务也不能虚构可复现性。
 
-**面试加分点：** 提到 LangSmith 和 Weights & Biases 等可观测性工具在多 Agent 调试中的价值。
+**源码依据：** [tests/agent/test_task_cancel.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/tests/agent/test_task_cancel.py)。
+
+**自查：** 区分源码事实、设计选项、模拟验证与真实运行。
 
 ---
 
@@ -1061,35 +1153,43 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 ---
 
-### Q120. 如何设计 Agent 系统的高可用方案？
+### Q120. 高可用设计与当前实现要怎样区分？
 
-**答案：** Agent 系统的高可用设计覆盖多个层面：（1）**无状态化**：Agent 服务本身设计为无状态，会话状态存储在 Redis 或数据库中，任何实例都能处理任何请求。这样可以通过水平扩展和负载均衡实现高可用。（2）**LLM API 容灾**：配置多个模型提供商（如 Claude + GPT + Qwen）作为 fallback，一个 API 不可用时自动切换到备用。（3）**限流与降级**：实现令牌桶限流，超限时降级到轻量级回复（如缓存答案或规则匹配）而非直接报错。（4）**工具调用超时**：为每个工具设置合理的超时时间和重试策略，防止单个工具的故障拖垮整个系统。（5）**健康检查**：定期检测 LLM API、向量库、MCP Server 的健康状态，不健康的服务自动摘除。（6）**数据持久化**：对话历史和记忆异步持久化到数据库，服务重启后可恢复。（7）**灰度发布**：新版本 Agent 先在小流量上验证，确认无问题后全量发布。
+**当前版本回答：** 负载均衡、共享存储、配额和容灾可以是设计选项，但当前本地SQLite和共享gateway不自动变成无状态多副本服务。先明确状态owner、恢复、幂等与副作用，再讨论可用性；未经实测不填SLA。
 
-**面试加分点：** 能给出具体的 SLA 指标，如「可用性 99.9%、P99 延迟 < 10s、单日最大支持 10 万次对话」。
+**源码依据：** [nanobot/gateway/runtime.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/gateway/runtime.py)。
 
----
-
-### Q121. 多租户 Agent 系统如何设计？
-
-**答案：** 多租户设计需要在共享基础设施的同时保证租户间的隔离：（1）**数据隔离**：每个租户的知识库数据存储在独立的向量库 namespace/collection 中，检索时只查询对应租户的数据。对话历史和记忆按 tenant_id 隔离存储。（2）**配置隔离**：每个租户可以自定义 system prompt、可用工具集、模型选择等，存储在租户级别的配置中。参考 Nanobot 的配置驱动组装理念。（3）**资源隔离**：通过 API 配额和限流策略防止单个租户耗尽共享资源。可以用 K8s 的 Resource Quota 实现计算资源隔离。（4）**安全隔离**：租户的 API 密钥、MCP Server 配置等敏感信息加密存储，相互不可见。（5）**计费隔离**：精确记录每个租户的 LLM token 使用量、工具调用次数、存储空间，支持按量计费。（6）**性能隔离**：对高价值租户保留专用资源池，防止被其他租户的高负载影响。
-
-**面试加分点：** 能对比「共享集群 + 逻辑隔离」和「独立部署」两种方案的成本和安全性权衡。
+**自查：** 区分源码事实、设计选项、模拟验证与真实运行。
 
 ---
 
-### Q122. Agent 系统的可观测性如何设计？
+### Q121. 多租户需要哪些额外隔离？
 
-**答案：** 可观测性是 Agent 系统运维的基础，需要覆盖三个支柱：（1）**Metrics（指标）**：关键业务指标——对话量、任务完成率、用户满意度；技术指标——LLM API 延迟/成功率、Token 使用量、工具调用延迟/成功率、Agent 循环步骤数；资源指标——CPU/内存/GPU 使用率。使用 Prometheus + Grafana 实现。（2）**Logging（日志）**：结构化日志记录每次 Agent 循环的完整信息——用户输入、模型思考过程、工具调用参数和结果、最终输出。使用 ELK Stack 或 Loki 集中管理。关键是为每次对话分配 trace_id，串联所有相关日志。（3）**Tracing（链路追踪）**：记录单次请求从接收到返回的完整链路——Channel 接入 → Agent 循环 → LLM 调用 → 工具执行 → 响应返回，每个环节的耗时和状态。可以用 LangSmith 或自建基于 OpenTelemetry 的方案。特别要关注的是**LLM 输出的质量监控**——定期抽样人工评估。
+**当前版本回答：** 账号、凭据、配置、会话命名空间、文件/工具授权和资源配额都要明确。当前WebUI是共享实例管理面，渠道配对或不同session_key并不自动提供租户私有隔离。
 
-**面试加分点：** 提到「黄金信号（Golden Signals）」——延迟、流量、错误率、饱和度，这是 Google SRE 的经典监控理念。
+**源码依据：** [docs/webui.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/webui.md)。
+
+**自查：** 区分源码事实、设计选项、模拟验证与真实运行。
 
 ---
 
-### Q123. Agent 系统的成本优化有哪些手段？
+### Q122. 当前运行时可以观察什么？
 
-**答案：** LLM API 费用通常是 Agent 系统最大的成本项，优化手段包括：（1）**Prompt 优化**：精简 system prompt，去除冗余描述；使用 Nanobot 的渐进披露策略，只在需要时加载 Skill 详情。（2）**缓存**：对相同或相似查询缓存 LLM 响应。语义缓存（用 Embedding 相似度判断是否命中）比精确匹配缓存覆盖率更高。（3）**模型分级**：简单问题（如 FAQ 查询）用便宜的小模型（如 GPT-3.5），复杂问题（如多步推理）用贵的大模型（如 GPT-4），通过路由 Agent 自动分级。（4）**Prompt Cache**：利用 Anthropic 等提供商的 Prompt Cache 功能，重复的 prompt 前缀只需支付 10% 费用。Nanobot 已支持此优化。（5）**批处理**：非实时任务（如文档总结）批量发送，利用批量 API 的折扣。（6）**Token 压缩**：在不影响理解的前提下压缩输入（如去除多余空格、缩写长 URL）。（7）**提前终止**：当 Agent 已经获得足够信息时尽早结束循环，避免不必要的额外 LLM 调用。
+**当前版本回答：** Hook、EventSink、MessageBus事件、llm_usage和交付状态提供不同层的事实。模型轮数、工具耗时、错误与停止原因需明确统计口径；未知用量不算零，也不把页面delta当完成记录。
 
-**面试加分点：** 能估算具体成本——如每天 1000 次对话，每次平均 5000 tokens，GPT-4o 定价下月费约多少美元。
+**源码依据：** [nanobot/agent/hook.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/hook.py)。
+
+**自查：** 区分源码事实、设计选项、模拟验证与真实运行。
+
+---
+
+### Q123. 成本优化怎样避免虚构效果？
+
+**当前版本回答：** 先测量实际模型、输入输出/缓存用量、请求次数和任务成功，再评估摘要、工具输出范围、模型选择或缓存。当前预算配置与Provider行为需核对，不能预设固定百分比或以原示例价格计算当前费用。
+
+**源码依据：** [nanobot/agent/context_governance.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context_governance.py)。
+
+**自查：** 区分源码事实、设计选项、模拟验证与真实运行。
 
 ---
 
@@ -1119,19 +1219,23 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 ## 十、工程实践（Q127-Q134）
 
-### Q127. Agent 项目中如何管理 API 密钥和敏感配置？
+### Q127. config.json怎样引用密钥环境变量？
 
-**答案：** 密钥管理是安全工程的基础：（1）**环境变量**：最基本的方式，通过 `.env` 文件或系统环境变量注入，代码中通过 `os.environ` 读取。`.env` 文件必须加入 `.gitignore`，绝对不能提交到 Git。（2）**密钥管理服务**：生产环境使用 AWS Secrets Manager、HashiCorp Vault 或阿里云 KMS 等专业密钥管理服务，支持密钥轮换、访问审计、细粒度权限控制。（3）**配置分层**：区分「代码配置」（Git 管理）和「环境配置」（密钥、连接串等，通过环境变量或密钥服务注入）。Nanobot 的 `config.json` 支持 `$env:VAR_NAME` 引用环境变量，实现了这种分离。（4）**最小权限**：每个服务只配置必要的密钥和权限，不共享全能密钥。（5）**定期轮换**：API 密钥定期更换，减少泄露后的影响范围。（6）**泄露检测**：使用 git-secrets 或 GitHub Secret Scanning 等工具防止密钥意外提交到代码仓库。
+**当前版本回答：** 使用${VAR}引用，由loader在运行配置解析；PowerShell设置变量用$env:VAR，但它不是JSON引用语法。不假设自动加载.env；服务需继承所需环境。凭据泄漏需真实撤销/轮换，不能编造泄漏经历。
 
-**面试加分点：** 能提到自己在项目中犯过密钥泄露的错误（即使是模拟的），并说明从中学到的教训——「一旦泄露，必须立即轮换而非简单删除 commit」。
+**源码依据：** [nanobot/config/loader.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/config/loader.py)。
+
+**自查：** 区分源码事实、设计选项、模拟验证与真实运行。
 
 ---
 
-### Q128. Agent 系统中的超时和重试策略如何设计？
+### Q128. 超时与重试怎样按边界处理？
 
-**答案：** 超时和重试是保证系统可靠性的关键机制：（1）**分层超时**：为不同层级设置递减的超时——整体请求超时 60s > Agent 循环超时 45s > 单次 LLM 调用超时 30s > 工具调用超时 15s。内层超时必须小于外层，保证外层能正常处理超时错误。（2）**指数退避重试**：对可重试的错误（网络超时 429/503、API 限流）使用指数退避——第 1 次 1s、第 2 次 2s、第 4 次 4s、最大 32s。添加随机抖动（Jitter）避免惊群效应。（3）**最大重试次数**：通常 3-5 次，超过后放弃并返回降级响应。（4）**不可重试错误**：认证失败 (401)、参数错误 (400)、内容违规 (451) 等不应重试，直接返回错误。（5）**幂等性保证**：重试的工具调用必须是幂等的，否则可能导致重复操作（如重复创建订单）。（6）**熔断器（Circuit Breaker）**：如果某个 API 连续失败超过阈值，暂时跳过该 API 的调用，避免无意义的重试浪费时间。
+**当前版本回答：** 模型请求、工具、MCP连接、Shell长进程和交付分别有控制。先分类错误、预算与副作用，重试不盲目重复非幂等动作。固定60/45/30/15秒或3次只是可能设计示例，不是当前默认契约。
 
-**面试加分点：** 能用代码示例展示 Python 中的 tenacity 库实现指数退避重试的写法。
+**源码依据：** [nanobot/agent/runner.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py)。
+
+**自查：** 区分源码事实、设计选项、模拟验证与真实运行。
 
 ---
 
@@ -1143,11 +1247,13 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 ---
 
-### Q130. 如何对 Agent 进行单元测试？
+### Q130. 如何用当前测试验证Agent？
 
-**答案：** Agent 测试的挑战在于 LLM 的非确定性，需要分层测试策略：（1）**工具函数测试**：对每个工具的 handler 函数编写传统单元测试，验证输入输出的正确性。这部分与普通函数测试相同。（2）**Prompt 模板测试**：验证 ContextBuilder 在不同场景下（空对话、多轮对话、大量工具）组装的 prompt 格式正确。（3）**Mock LLM 测试**：用 mock 替代真实的 LLM API，返回预设的响应（包括工具调用和文本回复），测试 AgentLoop 的流程控制逻辑。这可以测试：工具调用的路由是否正确、循环终止条件是否有效、错误处理是否完善。（4）**集成测试**：用真实 LLM API + 受控环境进行端到端测试，验证整体流程。使用固定温度（temperature=0）和固定 seed 提高可重复性。（5）**回归测试**：维护一组「黄金测试用例」，每次变更后运行确认核心功能未退化。（6）**Property-based Testing**：验证 Agent 行为的不变量——如「每次工具调用后必须有对应的 tool_result」。
+**当前版本回答：** Mock Provider隔离网络，tmp_path隔离状态，Event控制时序；检查正常、参数错误、取消与恢复契约。Mock通过不证明真实模型/平台质量。
 
-**面试加分点：** 提到 pytest-recording 或 VCR 等工具用于录制和回放 API 响应，减少测试对外部 API 的依赖。
+**源码依据：** [tests/agent/test_runner_core.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/tests/agent/test_runner_core.py)。
+
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
@@ -1159,27 +1265,33 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 ---
 
-### Q132. Agent 线上事故案例：某次工具调用导致的循环和如何修复
+### Q132. 如何讨论故障案例而不编造经历？
 
-**答案：** 这是一个典型的线上事故模式：**事故描述**：Agent 在执行文件搜索任务时，工具返回了一个超大的文件列表（数千个文件），Agent 试图逐一读取每个文件的内容来找到目标信息，导致 AgentLoop 进入了一个几百步的循环，消耗了大量 token 且最终超时。**根因分析**：（1）文件搜索工具没有限制返回结果数量，将几千个文件名全部返回。（2）Agent 没有对大量结果进行优先级排序或过滤，而是暴力遍历。（3）没有设置 Agent 循环的最大步骤数限制。**修复措施**：（1）工具层面：为搜索工具添加 `max_results` 参数，默认最多返回 20 个结果。（2）结果层面：应用 `_TOOL_RESULT_MAX_CHARS` 截断，防止超大结果注入上下文。（3）循环层面：设置 AgentLoop 最大迭代次数（如 Nanobot 的 15 次限制）。（4）Prompt 层面：在工具描述中明确说明「如果结果过多，请先缩小搜索范围」。
+**当前版本回答：** 用真实观察说明输入、停止原因、工具结果和恢复边界；没有线上事故就以学习复现表述。不能将旧固定迭代或虚构内存合并逻辑写成亲历优化。
 
-**面试加分点：** 能说出这类事故的预防原则——「Defense in Depth（纵深防御）」，从工具、循环、prompt 多个层面设置防护。
+**源码依据：** [nanobot/session/recovery.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/recovery.py)。
 
----
-
-### Q133. 代码评审（Code Review）Agent 代码时应关注什么？
-
-**答案：** 审查 Agent 代码时需要关注的特殊点：（1）**Prompt 注入防护**：检查用户输入是否会直接拼接到 prompt 中，可能导致 prompt injection 攻击。应该使用参数化的消息格式而非字符串拼接。（2）**错误处理完备性**：每个工具调用、API 调用都应有 try-catch 和降级方案。LLM API 返回异常格式时不应崩溃。（3）**Token 用量控制**：检查是否有无限循环风险、工具结果是否有大小限制、对话历史是否有压缩机制。（4）**并发安全**：共享状态是否有锁保护、异步代码是否正确使用 await。（5）**密钥安全**：API 密钥是否硬编码、日志中是否会打印密钥。（6）**幂等性**：工具调用是否幂等——同样的参数多次调用是否产生相同效果。（7）**可测试性**：LLM 调用是否可以被 mock、工具 handler 是否可以独立测试。（8）**Prompt 质量**：system prompt 是否清晰明确、工具描述是否准确、示例是否有误导性。
-
-**面试加分点：** 能提到自己在 review Nanobot 源码时发现的具体设计亮点或改进空间，展示实际的代码审查经验。
+**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
 
 ---
 
-### Q134. 如何文档化一个 Agent 项目？
+### Q133. 代码审查应关注哪些真实契约？
 
-**答案：** Agent 项目的文档需要比传统软件更详细，因为 Agent 的行为更难预测：（1）**架构文档**：包含系统架构图、组件交互关系、数据流向。标注 AgentLoop、ToolRegistry、MemoryConsolidator 等核心组件的职责和接口。（2）**Prompt 文档**：记录每个 system prompt 的设计意图、关键指令的作用、修改历史。Prompt 的每次变更都应该记录原因和预期效果。（3）**工具文档**：每个工具的名称、功能描述、参数说明、返回值格式、使用示例、已知限制。Nanobot 的工具在 ToolRegistry 中已经有 JSON Schema 格式的参数文档。（4）**部署文档**：环境要求、配置项说明、部署步骤、常见问题排查。（5）**运维手册（Runbook）**：常见告警的处理流程、回滚步骤、紧急联系人。（6）**评测报告**：Agent 在各项基准上的表现数据，作为后续优化的基准线。（7）**变更日志（Changelog）**：记录每个版本的功能变更、bug 修复和已知问题。
+**当前版本回答：** 核对状态所有权、调用ID配对、取消收尾、预算、凭据与程序授权。参数化消息有助区分角色但不是提示注入的完整防护；try/except和fallback也不应为所有内部状态机械添加。
 
-**面试加分点：** 展示本项目（learn-nanobot）的文档结构——从架构解析到面试准备，12 个章节的系统化组织就是一个优秀的文档化案例。
+**源码依据：** [nanobot/security/workspace_access.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/security/workspace_access.py)。
+
+**自查：** 区分源码事实、设计选项、模拟验证与真实运行。
+
+---
+
+### Q134. 怎样维护可核对的源码教程？
+
+**当前版本回答：** 固定提交、区分原文/签名/伪代码、标注状态与调用边界，检查链接、配置与代码语法，并同步问答。原目录仍为17章；未运行的业务或服务不写验证成功。
+
+**源码依据：** [docs/architecture.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/architecture.md)。
+
+**自查：** 区分源码事实、设计选项、模拟验证与真实运行。
 
 ---
 
