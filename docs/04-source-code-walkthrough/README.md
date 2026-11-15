@@ -1,6 +1,6 @@
 # 04 - 源码逐行解读
 
-本章保留原教程的目录总览与讲解主题，按本地 nanobot `0.4.1`（`27f1a836b5c04a30763dd91960059f81c05bf505`）核对实现。每节先说明问题，再展示带中文 # 注释的核心源码，最后解释关键点；完整实现从源码链接继续阅读。
+本章保留原教程的目录总览与讲解主题，按本地 nanobot `0.4.1`（`27f1a836b5c04a30763dd91960059f81c05bf505`）核对实现。每节保留原讲解主题；方法逻辑变化时，展示本地新版完整方法并添加中文 # 注释，保留签名、装饰器、全部分支及异常处理。长方法可以展开阅读，源码链接用于核对原文件。
 
 ## 目录
 
@@ -112,12 +112,208 @@ AgentLoop 负责接收消息、组织会话和安排一轮对话。先问自己�
 
 ### 核心类：AgentLoop
 
-原教程用“每收到一条消息创建一个 Runner”解释 Loop，新版已经不是这个关系。先抓住构造阶段这一行：
+原教程用“每收到一条消息创建一个 Runner”解释 Loop，新版已经不是这个关系。下面是新版完整构造方法，可重点查找 `self.runner = AgentRunner()`：
+
+<details>
+<summary>展开 AgentLoop.__init__() 完整方法（187 行源码）</summary>
+
+<a id="method-agentloop-init"></a>
+
+源码：[nanobot/agent/loop.py:274](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L274)，`AgentLoop.__init__` 完整方法。
 
 ```python
-# 在 Loop 构造阶段创建并复用 Runner；每次 run 是一次独立执行。
-self.runner = AgentRunner()
+# 组装 Loop 的执行依赖、会话协调、工具和运行状态；Runner 在这里创建并复用。
+def __init__(
+    self,
+    bus: MessageBus,
+    provider: LLMProvider,
+    workspace: Path,
+    model: str | None = None,
+    max_iterations: int | None = None,
+    max_concurrent_subagents: int | None = None,
+    context_window_tokens: int | None = None,
+    max_tool_result_chars: int | None = None,
+    provider_retry_mode: str = "standard",
+    cron_service: CronService | None = None,
+    restrict_to_workspace: bool = False,
+    session_manager: SessionManager | None = None,
+    tool_registry: ToolRegistry | None = None,
+    channels_config: ChannelsConfig | None = None,
+    timezone: str | None = None,
+    session_ttl_minutes: int = 0,
+    hooks: list[AgentHook] | None = None,
+    hook_factories: list[AgentTurnHookFactory] | None = None,
+    unified_session: bool = False,
+    disabled_skills: list[str] | None = None,
+    tools_config: ToolsConfig | None = None,
+    network_config: NetworkConfig | None = None,
+    provider_snapshot_loader: Callable[..., ProviderSnapshot] | None = None,
+    provider_signature: tuple[object, ...] | None = None,
+    model_presets: dict[str, ModelPresetConfig] | None = None,
+    preset_catalog_loader: preset_helpers.PresetCatalogLoader | None = None,
+    model_preset: str | None = None,
+    dream_model_preset: str | None = None,
+    preset_snapshot_loader: preset_helpers.PresetSnapshotLoader | None = None,
+    turn_delivery_factory: TurnDeliveryFactory | None = None,
+    runtime_model_publisher: Callable[[str, str | None], None] | None = None,
+    restart_mode: str = "auto",
+    local_trigger_store: LocalTriggerStore | None = None,
+    idle_compact_check_interval_seconds: int = 0,
+    recovery_admission: RecoveryAdmission | None = None,
+    builtin_assembly: Callable[[SessionManager, MessageBus, ToolRegistry, CommandRouter], ExecutionPolicy] | None = None,
+):
+    from nanobot.config.schema import ToolsConfig
+
+    _tc = tools_config or ToolsConfig()
+    defaults = AgentDefaults()
+    self.bus = bus
+    self.execution_policy: ExecutionPolicy | None = None
+    self._recovery_admission = recovery_admission
+    if turn_delivery_factory is not None:
+        if turn_delivery_factory.bus is not bus:
+            raise ValueError("turn delivery factory must use the agent message bus")
+        self.turn_delivery_factory = turn_delivery_factory
+    else:
+        self.turn_delivery_factory = TurnDeliveryFactory(bus)
+    self.runtime_event_publisher = self.turn_delivery_factory.runtime_event_publisher
+    self.channels_config = channels_config
+    self.restart_mode = restart_mode
+    self._runtime_model_publisher = runtime_model_publisher
+    self.workspace = workspace
+    initial_model = model or provider.get_default_model()
+    self.max_iterations = (
+        max_iterations if max_iterations is not None else defaults.max_tool_iterations
+    )
+    initial_context_window = (
+        context_window_tokens
+        if context_window_tokens is not None
+        else defaults.context_window_tokens
+    )
+    configured_presets = model_presets or {}
+    self.runtime_resolver = ModelRuntimeResolver(
+        LLMRuntime.capture(
+            provider,
+            initial_model,
+            context_window_tokens=initial_context_window,
+            snapshot_signature=provider_signature,
+        ),
+        model_presets=configured_presets,
+        preset_catalog_loader=preset_catalog_loader,
+        configured_default_preset=model_preset,
+        provider_snapshot_loader=provider_snapshot_loader,
+        preset_snapshot_loader=preset_snapshot_loader,
+    )
+    self.dream_model_preset = dream_model_preset
+    self.max_tool_result_chars = (
+        max_tool_result_chars
+        if max_tool_result_chars is not None
+        else defaults.max_tool_result_chars
+    )
+    self.provider_retry_mode = provider_retry_mode
+    self.tools_config = _tc
+    self.network_config = network_config or NetworkConfig()
+    self.web_config = _tc.web
+    self.exec_config = _tc.exec
+    self.cron_service = cron_service
+    self.local_trigger_store = local_trigger_store
+    self.restrict_to_workspace = restrict_to_workspace
+    self.workspace_scopes = WorkspaceScopeResolver(
+        default_workspace=workspace,
+        default_restrict_to_workspace=restrict_to_workspace,
+    )
+    self._start_time = time.time()
+    self._extra_hooks: list[AgentHook] = hooks or []
+    self._hook_factories: list[AgentTurnHookFactory] = hook_factories or []
+
+    self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills)
+    self.sessions = session_manager or SessionManager(workspace)
+    # One file-read/write tracker per logical session. The tool registry is
+    # shared by this loop, so tools resolve the active state via contextvars.
+    self._file_state_store = FileStateStore(max_sessions=SESSION_CACHE_MAX_SIZE)
+    # SessionManager owns every durable deletion entrypoint, including the
+    # WebUI and fork rollback paths.  Observe that boundary once instead of
+    # duplicating cleanup in each consumer.
+    self.sessions.set_delete_observer(self._file_state_store.discard)
+    self.tools = tool_registry if tool_registry is not None else ToolRegistry()
+    self._exec_session_manager = ExecSessionManager()
+    # 在构造阶段创建并复用 Runner，每次 run 的消息与状态仍是独立的。
+    self.runner = AgentRunner()
+    self.consolidator = Consolidator(
+        store=self.context.memory,
+        sessions=self.sessions,
+        build_messages=self.context.build_messages,
+        get_tool_definitions=self.tools.get_definitions,
+        resolve_prompt_context=PersistedPromptContextResolver(
+            workspace_scopes=self.workspace_scopes,
+            unified_session=unified_session,
+        ),
+    )
+    self.subagents = SubagentManager(
+        workspace=workspace,
+        bus=bus,
+        tools_config=_tc,
+        network_config=self.network_config,
+        max_tool_result_chars=self.max_tool_result_chars,
+        restrict_to_workspace=restrict_to_workspace,
+        disabled_skills=disabled_skills,
+        max_iterations=self.max_iterations,
+        max_concurrent_subagents=max_concurrent_subagents,
+        consolidator=self.consolidator,
+        session_manager=self.sessions,
+    )
+    self._unified_session = unified_session
+    self._running = False
+    self._runtime_context_providers: list[RuntimeContextProvider] = []
+    self._active_tasks: dict[str, set[asyncio.Task[Any]]] = {}
+    self._discarding_sessions: set[str] = set()
+    self._background_tasks: set[asyncio.Task[Any]] = set()
+    self._close_lock = asyncio.Lock()
+    self._session_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+        weakref.WeakValueDictionary()
+    )
+    # A queue is installed before its single session worker is scheduled.
+    # It remains the only admission path until that worker atomically
+    # observes the queue empty and removes it.
+    self._pending_queues: dict[str, asyncio.Queue[InboundMessage]] = {}
+    self._preserve_inflight_turns_on_shutdown = False
+    self._deferred_automation_turns: dict[str, list[InboundMessage]] = {}
+    self._cron_turns = CronTurnCoordinator(
+        enqueue=self._enqueue_session_message,
+        deferred_queues=self._deferred_automation_turns,
+    )
+    self._local_trigger_turns = LocalTriggerTurnCoordinator(
+        enqueue=self._enqueue_session_message,
+        deferred_queues=self._deferred_automation_turns,
+    )
+    self._automation_turn_coordinators = (
+        self._cron_turns,
+        self._local_trigger_turns,
+    )
+    # NANOBOT_MAX_CONCURRENT_REQUESTS: unset or <=0 means unlimited.
+    _max = int(os.environ.get("NANOBOT_MAX_CONCURRENT_REQUESTS", "0"))
+    self._concurrency_gate: asyncio.Semaphore | None = (
+        asyncio.Semaphore(_max) if _max > 0 else None
+    )
+    self.auto_compact = AutoCompact(
+        sessions=self.sessions,
+        consolidator=self.consolidator,
+        session_ttl_minutes=session_ttl_minutes,
+        bind_events=self._idle_events,
+        session_lock=self._get_session_lock,
+    )
+    self._idle_compact_check_interval_s = idle_compact_check_interval_seconds
+    self._next_idle_compact_check_at = time.monotonic()
+    self._idle_compact_check_running = False
+    if model_preset:
+        self.set_model_preset(model_preset, publish_update=False)
+    self.commands = CommandRouter()
+    register_core_commands(self.commands)
+    if builtin_assembly is not None:
+        self.execution_policy = builtin_assembly(self.sessions, self.bus, self.tools, self.commands)
+    self._register_default_tools(provider_snapshot_loader=provider_snapshot_loader)
 ```
+
+</details>
 
 **关键点解读：**
 
@@ -142,25 +338,75 @@ self.runner = AgentRunner()
 
 ### run() 方法：核心消费循环
 
-原教程这个小节仍然讲 `async def run(self)`。新版保留“等待输入，再分发”的主线，核心等待代码是：
+原教程这个小节仍然讲 `async def run(self)`。新版增加超时维护、取消判断、输入接纳和关闭处理，下面展示完整 `async def run(self) -> None:`，不再只取等待和分发两行。
 
-源码：[nanobot/agent/loop.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L1408)，`AgentLoop.run`。
+<a id="method-agentloop-run"></a>
 
-```python
-# 等待输入的超时窗口是 1 秒，不是模型回答的时限。
-async with asyncio.timeout(1.0):
-    # 等待消息时让出事件循环，收到后交给分发层。
-    msg = await self.bus.consume_inbound()
-```
-
-消费到消息后，真实分发调用如下；超时与关闭逻辑见同方法的完整源码：
-
-源码：[nanobot/agent/loop.py:1440](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L1440)
+源码：[nanobot/agent/loop.py:1408](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L1408)，`AgentLoop.run` 完整方法。
 
 ```python
-# 交给输入分发器；优先命令和会话队列在下一层处理。
-await self._dispatch_inbound(msg)
+# 持续消费输入并分发；区分超时、取消和输入拒绝，退出时关闭运行时。
+async def run(self) -> None:
+    """Run the agent loop, dispatching messages as tasks to stay responsive to /stop."""
+    # 标记消费循环已启动，后续 while 根据该状态继续等待输入。
+    self._running = True
+    # 包含 finally 清理路径，保证正常结束和异常退出都按约定收尾。
+    try:
+        logger.info("Agent loop started")
+
+        # 循环只负责持续接收与分发，完整模型执行由下层协调。
+        while self._running:
+            try:
+                # Keep dequeue and admission in this task. wait_for would
+                # dequeue in another task, leaving a false-idle handoff gap.
+                # 只限制本次取消息的等待时间，不限制模型回答时间。
+                async with asyncio.timeout(1.0):
+                    # 无输入时异步等待，取到输入后进入分发流程。
+                    msg = await self.bus.consume_inbound()
+            # 队列等待超时走维护检查路径，然后继续消费输入。
+            except asyncio.TimeoutError:
+                # Storage may wait behind a turn that /stop needs to cancel.
+                # 没有新输入时仍按时间条件检查是否需要后台整理会话。
+                if self._idle_compact_check_due(time.monotonic()):
+                    # 交给后台任务处理，让主循环继续接收输入和停止命令。
+                    self.schedule_background(self._check_expired_sessions_if_due())
+                continue
+            # 单独处理取消信号，避免把真实取消误当成普通运行错误。
+            except asyncio.CancelledError:
+                # Preserve real task cancellation so shutdown can complete cleanly.
+                # Only ignore non-task CancelledError signals that may leak from integrations.
+                # 真实关闭或任务取消必须继续传播，不能误当作普通集成错误吞掉。
+                if not self._running or task_is_cancelling():
+                    raise
+                logger.warning(
+                    "Ignoring leaked CancelledError while consuming inbound messages"
+                )
+                continue
+            # 其他取消息错误只记录告警并继续循环，避免一次集成错误停止所有输入接收。
+            except Exception as e:
+                logger.warning("Error consuming inbound message: {}, continuing...", e)
+                continue
+
+            # 在输入接纳活动范围内分发，协调运行时忙闲与关闭状态。
+            with self.bus.admission.activity():
+                try:
+                    # 由分发器处理优先命令、会话路由和已有会话队列。
+                    await self._dispatch_inbound(msg)
+                # 会话队列已满、会话状态冲突或执行控制拒绝时，向用户反馈输入未被接纳。
+                except (SessionOperationQueueFullError, SessionConflictError, ExecutionControlError) as exc:
+                    key = self._effective_session_key(msg)
+                    logger.warning("Session input rejected for {}: {}", key, exc)
+                    if msg.is_user_input:
+                        delivery = self.turn_delivery_factory.unrouted(msg, key)
+                        # 输入被拒绝时反馈失败；是否发布完成事件取决于该会话是否仍有活动队列。
+                        await delivery.fail(publish_completion=key not in self._pending_queues)
+    # 无论正常返回、异常或取消，都进入这里完成资源与状态收尾。
+    finally:
+        # 统一关闭 Loop 持有的运行资源，保证异常退出也能清理。
+        await self.aclose()
 ```
+
+完整的 `AgentLoop.run()` 已在[本章前文](#method-agentloop-run)列出，可结合此处讲解对照阅读。
 
 **关键点解读：**
 
@@ -176,17 +422,58 @@ await self._dispatch_inbound(msg)
 
 保留原教程“默认工具如何注册”的问题，但新版应转到 `ToolLoader.load()`，不要再寻找旧示例中的同名方法。
 
-源码：[nanobot/agent/tools/loader.py:99](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/loader.py#L99)
+<a id="method-toolloader-load"></a>
+
+源码：[nanobot/agent/tools/loader.py:89](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/loader.py#L89)，`ToolLoader.load` 完整方法。
 
 ```python
-# 作用域不匹配时跳过，避免把其他用途的工具加载进来。
-if scope not in getattr(tool_cls, "_scopes", {"core"}):
-    continue
-# 工具类结合当前上下文判断是否启用。
-if not tool_cls.enabled(ctx):
-    continue
-# 通过工具类工厂注入依赖，创建真实实例。
-tool = tool_cls.create(ctx)
+# 发现和筛选工具，创建实例，处理名称冲突后注册到工具表。
+def load(self, ctx: ToolContext, registry: ToolRegistry, *, scope: str = "core") -> list[str]:
+    """Load defaults while preserving tools already supplied by the caller."""
+    registered: list[str] = []
+    supplied_names = set(registry.tool_names)
+    builtin_names: set[str] = set()
+    sources = [(self.discover(), False), (self._discover_plugins().values(), True)]
+    for source, is_plugin_source in sources:
+        for tool_cls in source:
+            cls_label = tool_cls.__name__
+            try:
+                if scope not in getattr(tool_cls, "_scopes", {"core"}):
+                    continue
+                if not tool_cls.enabled(ctx):
+                    continue
+                tool = tool_cls.create(ctx)
+                if is_plugin_source:
+                    tool = _LegacyErrorPrefixTool(tool)
+                if tool.name in supplied_names:
+                    if not is_plugin_source:
+                        builtin_names.add(tool.name)
+                    continue
+                if registry.has(tool.name):
+                    if is_plugin_source and tool.name in builtin_names:
+                        logger.warning(
+                            "Plugin %s skipped: conflicts with built-in tool %s",
+                            cls_label, tool.name,
+                        )
+                        continue
+                    logger.warning(
+                        "Tool name collision: %s from %s overwrites existing",
+                        tool.name, cls_label,
+                    )
+                registry.register(tool)
+                registered.append(tool.name)
+                if not is_plugin_source:
+                    builtin_names.add(tool.name)
+            # 处理 Exception，按本方法约定记录、转换或继续传播错误。
+            except Exception:
+                logger.exception("Failed to register tool: %s", cls_label)
+        if not is_plugin_source and "rg" in builtin_names:
+            replaced = (builtin_names & {"grep", "find_files"}) - supplied_names
+            for name in replaced:
+                registry.unregister(name)
+            registered = [name for name in registered if name not in replaced]
+            builtin_names.difference_update(replaced)
+    return registered
 ```
 
 **关键点解读：**发现解决“有哪些工具类”，创建解决“依赖怎么传进去”，注册解决“用什么名字找到实例”。拆开这三步，才能理解为什么新增工具通常无需在 Loop 中继续堆注册语句。具体可用工具还取决于配置，目录中存在文件不等于本轮一定启用。
@@ -195,18 +482,139 @@ tool = tool_cls.create(ctx)
 
 原示例把用户前 200 字和回复前 500 字存到 `HISTORY.md`，这不再是当前方法的实现。新版这里处理的是本轮结构化会话增量，而且方法是同步 `def`。
 
-源码：[nanobot/agent/loop.py:2512](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L2512)
+<details>
+<summary>展开 AgentLoop._save_turn() 完整方法（110 行源码）</summary>
+
+<a id="method-agentloop-save-turn"></a>
+
+源码：[nanobot/agent/loop.py:2464](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L2464)，`AgentLoop._save_turn` 完整方法。
 
 ```python
-# 将原始轮次消息转换成适合持久化的条目。
-entry = persisted_message(message)
-# 取出内部后续输入标识，不把它当作普通消息字段存储。
-followup_id = entry.pop(PENDING_FOLLOWUP_ID_KEY, None)
-role, content = entry.get("role"), entry.get("content")
-# 空 assistant 且没有工具调用时跳过，避免污染未来上下文。
-if role == "assistant" and not content and not entry.get("tool_calls"):
-    continue  # skip empty assistant messages — they poison session context
+# 把本轮新增结构化消息写入会话，校验工具调用配对并处理摘要检查点。
+def _save_turn(
+    self,
+    session: Session,
+    messages: list[dict[str, Any]],
+    skip: int,
+    *,
+    turn_latency_ms: int | None = None,
+    summary_checkpoint: SessionSummaryCheckpoint | None = None,
+    input_persisted_early: bool = False,
+) -> None:
+    declared_tool_call_ids = {
+        str(tc["id"])
+        for m in session.messages
+        if m.get("role") == "assistant"
+        for tc_value in cast(Iterable[object], m.get("tool_calls") or [])
+        if isinstance(tc_value, dict)
+        for tc in (cast(dict[str, Any], tc_value),)
+        if tc.get("id")
+    }
+    fulfilled_tool_call_ids = {
+        str(m["tool_call_id"])
+        for m in session.messages
+        if m.get("role") == "tool" and m.get("tool_call_id")
+    }
+    last_assistant_idx: int | None = None
+    saved_followup_ids: set[str] = set()
+    # 校验摘要边界，避免消息过滤后把摘要插入错误位置。
+    checkpoint_boundary = self._validated_checkpoint_boundary(
+        summary_checkpoint,
+        skip=skip,
+        message_count=len(messages),
+        session_key=session.key,
+    )
+
+    # The trigger input may already be the session tail while still being
+    # the first message after the replacement checkpoint.
+    if summary_checkpoint is not None and checkpoint_boundary == skip - 1:
+        insert_at = len(session.messages) - (1 if input_persisted_early else 0)
+        # 在原始 transcript 对应边界插入摘要检查点。
+        session.commit_summary_checkpoint(
+            summary_checkpoint.summary,
+            insert_at=insert_at,
+        )
+
+    # 从新增消息下标开始保存，skip 不是截断每条消息的字符长度。
+    for message_index, message in enumerate(messages[skip:], start=skip):
+        # Insert against the raw transcript index before filtering the
+        # message so persistence cleanup cannot shift the H/Δ boundary.
+        if summary_checkpoint is not None and checkpoint_boundary == message_index:
+            # 在原始 transcript 对应边界插入摘要检查点。
+            session.commit_summary_checkpoint(summary_checkpoint.summary)
+
+        # 把模型消息转换成适合会话持久化的条目。
+        entry = persisted_message(message)
+        followup_id = entry.pop(PENDING_FOLLOWUP_ID_KEY, None)
+        # 根据角色区分用户、assistant 和工具结果的保存约束。
+        role, content = entry.get("role"), entry.get("content")
+        # 空 assistant 且没有工具调用时跳过，防止污染后续请求。
+        if role == "assistant" and not content and not entry.get("tool_calls"):
+            continue  # skip empty assistant messages — they poison session context
+        # 工具结果需要匹配已声明且尚未完成的调用 ID，防止重放时破坏消息结构。
+        if role == "tool":
+            tool_call_id = entry.get("tool_call_id")
+            tool_call_id_str = str(tool_call_id) if tool_call_id else ""
+            if (
+                not tool_call_id_str
+                or tool_call_id_str not in declared_tool_call_ids
+                or tool_call_id_str in fulfilled_tool_call_ids
+            ):
+                # Undeclared tool results corrupt future provider requests.
+                logger.warning(
+                    "Dropping invalid tool result {} from session {} during persistence",
+                    tool_call_id_str or "(missing id)",
+                    session.key,
+                )
+                continue
+            fulfilled_tool_call_ids.add(tool_call_id_str)
+            # Preserve model-visible text for replay; redact only inline images.
+            if isinstance(content, list):
+                filtered = self._sanitize_persisted_blocks(
+                    cast(list[object], content),
+                )
+                if not filtered:
+                    # Preserve the tool_call/result pair after block filtering.
+                    filtered = [
+                        {"type": "text", "text": "[tool result omitted during persistence]"}
+                    ]
+                entry["content"] = filtered
+        elif role == "user":
+            if isinstance(content, list):
+                filtered = self._sanitize_persisted_blocks(
+                    cast(list[object], content),
+                )
+                if not filtered:
+                    continue
+                entry["content"] = filtered
+        # 仅在消息缺少时间戳时补充，保留已有来源时间。
+        entry.setdefault("timestamp", datetime.now().isoformat())
+        # 将清理后的消息追加到会话对象；外围流程再提交会话状态。
+        session.messages.append(entry)
+        if role == "user" and isinstance(followup_id, str) and followup_id:
+            saved_followup_ids.add(followup_id)
+        if role == "assistant":
+            last_assistant_idx = len(session.messages) - 1
+            declared_tool_call_ids.update(
+                str(tc["id"])
+                for tc_value in cast(
+                    Iterable[object],
+                    entry.get("tool_calls") or [],
+                )
+                if isinstance(tc_value, dict)
+                for tc in (cast(dict[str, Any], tc_value),)
+                if tc.get("id")
+            )
+    if summary_checkpoint is not None and checkpoint_boundary == len(messages):
+        # 在原始 transcript 对应边界插入摘要检查点。
+        session.commit_summary_checkpoint(summary_checkpoint.summary)
+    if turn_latency_ms is not None and last_assistant_idx is not None:
+        session.messages[last_assistant_idx]["latency_ms"] = int(turn_latency_ms)
+    session.consumed_followup_ids |= saved_followup_ids
+    session.updated_at = datetime.now()
 ```
+
+</details>
 
 **关键点解读：**
 
@@ -233,14 +641,103 @@ if role == "assistant" and not content and not entry.get("tool_calls"):
 
 `AgentRunSpec` 携带本轮执行条件，`AgentRunResult` 汇总本轮结果。`run()` 中创建本轮消息和 Hook 上下文，这是理解对象复用的关键：
 
+<a id="method-agentrunner-run"></a>
+
+源码：[nanobot/agent/runner.py:284](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py#L284)，`AgentRunner.run` 完整方法。
+
 ```python
-# 本轮优先使用指定 Hook，否则使用基础生命周期实现。
-hook = spec.hook or AgentHook()
-has_run_hooks = hook.has_run_hooks()
-# 这是本次调用的局部列表，不是所有会话共享的消息历史。
-messages: list[dict[str, Any]] = []
-# 单独保存本轮 Hook 状态，与 Runner 对象寿命区分。
-context = AgentRunHookContext(messages=[])
+# 管理一次 Agent 执行的生命周期，初始化本轮状态并在成功、失败或取消后收尾。
+async def run(self, spec: AgentRunSpec) -> AgentRunResult:
+    # 优先使用调用方传入的 Hook，否则使用基础生命周期实现。
+    hook = spec.hook or AgentHook()
+    has_run_hooks = hook.has_run_hooks()
+    # 初始化本次运行的局部消息列表，避免把对象复用误解成共享消息历史。
+    messages: list[dict[str, Any]] = []
+    # 创建单次运行的 Hook 状态，记录输出、用量与停止原因。
+    context = AgentRunHookContext(messages=[])
+    llm_usage_source_token = bind_llm_usage_source(
+        spec.llm_usage_source or source_from_session_key(spec.session_key)
+    )
+
+    # 包含 finally 清理路径，保证正常结束和异常退出都按约定收尾。
+    try:
+        # 包含 finally 清理路径，保证正常结束和异常退出都按约定收尾。
+        try:
+            try:
+                # 准备初始消息与上下文压缩状态，再进入生命周期和核心迭代。
+                messages, compaction = await self.prepare_prompt(self._initial_transcript_and_compaction, spec)
+                context.messages = await self._run_context_snapshot(hook, messages) if has_run_hooks else []
+                # 在核心执行前触发运行级扩展点。
+                await hook.before_run(context)
+                # 调用完整模型工具循环，结果包含消息、文本、用量和停止原因。
+                result = await self._run_core(spec, hook, messages, compaction)
+            # 处理 Exception，按本方法约定记录、转换或继续传播错误。
+            except Exception as exc:
+                context.messages = await self._run_context_snapshot(hook, messages) if has_run_hooks else []
+                context.stop_reason = "error"
+                context.error = f"Error: {type(exc).__name__}: {exc}"
+                context.exception = exc
+                # 通知扩展层本轮失败信息，实际异常是否继续抛出由后续代码决定。
+                await hook.on_error(context)
+                raise
+            else:
+                context.messages = await self._run_context_snapshot(hook, result.messages) if has_run_hooks else []
+                context.final_content = result.final_content
+                context.tools_used = list(result.tools_used)
+                context.usage = result.usage
+                context.stop_reason = result.stop_reason
+                context.error = result.error
+                context.tool_events = deepcopy(result.tool_events)
+                context.had_injections = result.had_injections
+                context.exception = None
+                if context.error is not None:
+                    # 通知扩展层本轮失败信息，实际异常是否继续抛出由后续代码决定。
+                    await hook.on_error(context)
+                # 把成功路径的运行结果交给运行级扩展点。
+                await hook.after_run(context)
+                return result
+        # 单独处理取消信号，避免把真实取消误当成普通运行错误。
+        except asyncio.CancelledError as exc:
+            context.stop_reason = "cancelled"
+            context.error = None
+            context.exception = exc
+            raise
+        # 无论正常返回、异常或取消，都进入这里完成资源与状态收尾。
+        finally:
+            if has_run_hooks:
+                try:
+                    if isinstance(context.exception, asyncio.CancelledError):
+                        context.messages = await self._run_context_snapshot(hook, messages)
+                    else:
+                        context.messages = await self._run_context_snapshot(hook, messages)
+                # 单独处理取消信号，避免把真实取消误当成普通运行错误。
+                except asyncio.CancelledError as exc:
+                    context.stop_reason = "cancelled"
+                    context.error = None
+                    context.exception = exc
+                    context.messages = await self._run_context_snapshot(hook, messages)
+                    raise
+    # 无论正常返回、异常或取消，都进入这里完成资源与状态收尾。
+    finally:
+        # 包含 finally 清理路径，保证正常结束和异常退出都按约定收尾。
+        try:
+            if context.exception is None:
+                # 运行退出时收尾；与成功完成后的 after_run 职责不同。
+                await hook.on_finally(context)
+            else:
+                try:
+                    # 运行退出时收尾；与成功完成后的 after_run 职责不同。
+                    await hook.on_finally(context)
+                # 处理 Exception，按本方法约定记录、转换或继续传播错误。
+                except Exception:
+                    logger.opt(exception=tool_log_content_allowed()).error(
+                        "AgentHook.on_finally error after {}",
+                        context.stop_reason or "run exception",
+                    )
+        # 无论正常返回、异常或取消，都进入这里完成资源与状态收尾。
+        finally:
+            # 恢复当前异步执行上下文中的用量来源绑定。
+            reset_llm_usage_source(llm_usage_source_token)
 ```
 
 **关键点解读：**`messages` 和 `context` 是这次调用的局部变量；`spec.hook` 可以提供本轮扩展行为，缺省时使用基础 Hook。不要看到共享 Runner 就认定不同会话会共用同一个局部列表，也不要据此忽略工具实例和会话层自己的并发约束。
@@ -249,18 +746,7 @@ context = AgentRunHookContext(messages=[])
 
 新版把运行生命周期留在 `run()`，把迭代主体拆到 `_run_core()`。读原来的 run 主题时，需要顺着这个调用走一步。
 
-源码：[nanobot/agent/runner.py:296](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py#L296)
-
-```python
-# 准备本轮消息与上下文压缩状态。
-messages, compaction = await self.prepare_prompt(self._initial_transcript_and_compaction, spec)
-# 按 Hook 需要制作本轮消息快照。
-context.messages = await self._run_context_snapshot(hook, messages) if has_run_hooks else []
-# 进入单次运行前的生命周期扩展点。
-await hook.before_run(context)
-# 真正的模型与工具迭代主体位于 _run_core。
-result = await self._run_core(spec, hook, messages, compaction)
-```
+完整的 `AgentRunner.run()` 已在[本章前文](#method-agentrunner-run)列出，可结合此处讲解对照阅读。
 
 **关键点解读：**
 
@@ -275,14 +761,32 @@ result = await self._run_core(spec, hook, messages, compaction)
 
 原教程把工具执行及 `save_memory` 特判写在此处。新版没有照搬这套私有方法，应读 `tools/execution.py` 与 `ToolRegistry.execute()`。原问题保留，答案改为实际分层：Runner 组织调用，执行层处理调度，Registry 校验并调用工具。
 
-源码：[nanobot/agent/tools/registry.py:199](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L199)
+<a id="method-toolregistry-execute"></a>
+
+源码：[nanobot/agent/tools/registry.py:197](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L197)，`ToolRegistry.execute` 完整方法。
 
 ```python
-# 先查找工具、转换并校验参数，再允许执行。
-tool, params, error = self.prepare_call(name, params)
-# 发现错误就返回工具错误结果，不进行实际副作用。
-if error:
-    return ToolResult.error(with_tool_error_hint(str(error)))
+# 先准备和校验参数，再执行工具，把工具失败和异常转换成统一错误结果。
+async def execute(self, name: str, params: Any) -> Any:
+    """Execute a tool by name with given parameters."""
+    # 执行前先完成工具查找、参数转换与校验。
+    tool, params, error = self.prepare_call(name, params)
+    if error:
+        return ToolResult.error(with_tool_error_hint(str(error)))
+
+    try:
+        assert tool is not None  # guarded by prepare_call()
+        # 只有通过准备阶段后才执行真实副作用。
+        result = await tool.execute(**params)
+        if is_tool_error_result(result):
+            return ToolResult.error(
+                with_tool_error_hint(str(result)),
+                error_code=result.error_code if isinstance(result, ToolResult) else None,
+            )
+        return result
+    # 处理 Exception，按本方法约定记录、转换或继续传播错误。
+    except Exception as e:
+        return ToolResult.error(with_tool_error_hint(f"Error executing {name}: {str(e)}"))
 ```
 
 **关键点解读：**模型产生的是调用意图，Python 才执行实际副作用；参数 Schema 告诉模型怎么调用，运行时校验则检查真实参数。长期记忆读写及整理要沿当前 MemoryStore、工具和记忆流程追踪，不能继续解释成 Runner 必定拦截一个虚拟 `save_memory`。
@@ -319,37 +823,81 @@ ContextBuilder 决定模型这一次看见什么。用户消息只是输入的�
 
 ### build_system_prompt() 方法
 
-这个方法的主线是按条件收集 `parts`，最后连接。保留最容易理解的真实开头：
+这个方法的主线是按条件收集 `parts`，最后连接。下面展示完整方法，并在各类上下文来源处加入注释：
+
+<a id="method-contextbuilder-build-system-prompt"></a>
+
+源码：[nanobot/agent/context.py:87](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py#L87)，`ContextBuilder.build_system_prompt` 完整方法。
 
 ```python
-# 本轮指定项目优先，否则使用默认工作区。
-root = workspace or self.workspace
-# 先加入身份说明，再逐步装配其他提示词来源。
-parts = [self._get_identity(channel=channel, workspace=root)]
+# 按身份、项目说明、工具契约、记忆、技能和会话摘要组装系统提示词。
+def build_system_prompt(
+    self,
+    *,
+    channel: str | None = None,
+    session_summary: SessionSummary | None = None,
+    workspace: Path | None = None,
+    include_memory: bool = True,
+) -> str:
+    """Build the system prompt from identity, bootstrap files, memory, and skills."""
+    # 本轮指定的项目优先，否则使用默认工作区。
+    root = workspace or self.workspace
+    # 系统提示词从身份开始，再逐项加入资料。
+    parts = [self._get_identity(channel=channel, workspace=root)]
 
-# 读取项目启动说明，区别于聊天历史。
-bootstrap = self._load_bootstrap_files(root)
-# 只有存在启动说明时才加入提示词。
-if bootstrap:
-    parts.append(bootstrap)
+    # 加载启动说明，区别于聊天历史。
+    bootstrap = self._load_bootstrap_files(root)
+    if bootstrap:
+        parts.append(bootstrap)
+
+    parts.append(render_template("agent/tool_contract.md", track_source=True))
+
+    project_path = root.expanduser().resolve()
+    if project_path != self.workspace.expanduser().resolve():
+        parts.append(
+            "# Current Project\n\n"
+            f"Working directory: {project_path}\n"
+            "Use it as the default root for project files and relative tool paths."
+        )
+
+    # 本轮允许加载长期记忆时才读取。
+    if include_memory:
+        memory = self.memory.read_memory()
+        if memory and not self._is_template_content(memory, "memory/MEMORY.md"):
+            parts.append(memory)
+            record_source(self.memory.memory_file, memory)
+        elif self.memory.memory_file.is_file():
+            record_source(self.memory.memory_file, "", loaded=False)
+
+    # 本次组装使用一致的技能发现与元数据快照。
+    with self.skills.snapshot():
+        # always 技能加载正文，其余技能随后只先给摘要。
+        active_skills = self.skills.get_always_skills()
+        if active_skills:
+            active_content = self.skills.load_skills_for_context(active_skills)
+            if active_content:
+                parts.append(f"# Active Skills\n\n{active_content}")
+
+        skills_summary = self.skills.build_skills_summary(
+            exclude=set(active_skills),
+            workspace=root,
+        )
+    if skills_summary:
+        parts.append(render_template("agent/skills_section.md", skills_summary=skills_summary, track_source=True))
+
+    if session_summary and session_summary["text"] != "(nothing)":
+        parts.append(
+            "[Archived Context Summary]\n\n"
+            f"Previous conversation summary (last active {session_summary['last_active']}):\n"
+            f"{session_summary['text']}"
+        )
+
+    return "\n\n---\n\n".join(parts)
 ```
 
-后续长期记忆的条件加载代码如下：
+长期记忆加载分支也已包含在上述完整方法中：
 
-源码：[nanobot/agent/context.py:113](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py#L113)
-
-```python
-# 本轮允许加载长期记忆时才读取。
-if include_memory:
-    memory = self.memory.read_memory()
-    # 仅将非空且不是默认模板的记忆加入提示词。
-    if memory and not self._is_template_content(memory, "memory/MEMORY.md"):
-        parts.append(memory)
-        # 记录本次上下文引用的来源，方便追踪。
-        record_source(self.memory.memory_file, memory)
-    elif self.memory.memory_file.is_file():
-        record_source(self.memory.memory_file, "", loaded=False)
-```
+完整的 `ContextBuilder.build_system_prompt()` 已在[本章前文](#method-contextbuilder-build-system-prompt)列出，可结合此处讲解对照阅读。
 
 **关键点解读：**`workspace or self.workspace` 允许本轮指定项目；bootstrap 是启动说明来源，不能与消息历史混同。记忆和技能有加载条件，因此“磁盘上有文件”不等于“每次都全文注入”。always 技能加载正文，其余技能先提供摘要，体现按需获取知识。
 
@@ -357,25 +905,58 @@ if include_memory:
 
 新版中它是兼容包装器，先构造 `TranscriptInput` 并调用 `build_transcript()`，然后按条件合并相邻同角色消息。核心运行路径阅读时还要进入 transcript 构建，而不是只盯这个旧入口名。
 
-源码：[nanobot/agent/context.py:237](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py#L237)
+<a id="method-contextbuilder-build-messages"></a>
+
+源码：[nanobot/agent/context.py:223](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py#L223)，`ContextBuilder.build_messages` 完整方法。
 
 ```python
-# 兼容入口把构建工作委托给 build_transcript。
-messages = self.build_transcript(
-    # 将历史、当前消息、媒体和摘要装成类型化输入。
-    TranscriptInput(
-        history=history,
-        current_message=current_message,
-        media=media,
-        current_role=current_role,
-        session_summary=session_summary,
-        runtime_context_blocks=runtime_context_blocks,
-    # 渠道、工作区与记忆开关控制本次装配条件。
-    ),
-    channel=channel,
-    workspace=workspace,
-    include_memory=include_memory,
-)
+# 把输入交给 transcript 构建器，再处理相邻同角色消息的兼容合并。
+def build_messages(
+    self,
+    history: list[dict[str, Any]],
+    current_message: str | None,
+    *,
+    media: list[str] | None = None,
+    channel: str | None = None,
+    current_role: str = "user",
+    session_summary: SessionSummary | None = None,
+    runtime_context_blocks: Sequence[RuntimeContextBlock] | None = None,
+    workspace: Path | None = None,
+    include_memory: bool = True,
+) -> list[dict[str, Any]]:
+    """Compatibility wrapper for callers that need merged adjacent roles."""
+    # 兼容入口委托给真正的 transcript 构建器。
+    messages = self.build_transcript(
+        TranscriptInput(
+            history=history,
+            current_message=current_message,
+            media=media,
+            current_role=current_role,
+            session_summary=session_summary,
+            runtime_context_blocks=runtime_context_blocks,
+        ),
+        channel=channel,
+        workspace=workspace,
+        include_memory=include_memory,
+    )
+    if current_message is None:
+        return messages
+    current = messages[-1]
+    if len(messages) < 2 or messages[-2].get("role") != current.get("role"):
+        return messages
+
+    # 复制前一条消息后合并，避免直接就地改写原条目。
+    merged = dict(messages[-2])
+    merged["content"] = self._merge_message_content(
+        merged.get("content"),
+        current.get("content"),
+    )
+    current_meta = current.get("_meta")
+    if current.get("role") == "user" and isinstance(current_meta, dict):
+        internal_meta = dict(merged.get("_meta") or {})
+        internal_meta.update(cast(dict[str, Any], current_meta))
+        merged["_meta"] = internal_meta
+    return [*messages[:-2], merged]
 ```
 
 **关键点解读：**历史消息保留角色与工具调用结构；当前用户消息追加在本轮输入位置；运行时上下文是另一类输入。调试回答遗漏信息时，先检查最终 transcript 里是否真的包含它，再判断是模型问题还是上下文装配问题。
@@ -410,8 +991,12 @@ messages = self.build_transcript(
 
 ### read_memory() 方法
 
+<a id="method-memorystore-read-memory"></a>
+
+源码：[nanobot/agent/memory.py:221](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L221)，`MemoryStore.read_memory` 完整方法。
+
 ```python
-# 长期记忆读取接口；是否注入 Prompt 由上下文构建器决定。
+# 读取长期记忆文本；是否注入模型由上下文构建器决定。
 def read_memory(self) -> str:
     return self.read_file(self.memory_file)
 ```
@@ -422,8 +1007,12 @@ def read_memory(self) -> str:
 
 原教程的“保存长期记忆”主题保留；新版实际方法名是 `write_memory()`：
 
+<a id="method-memorystore-write-memory"></a>
+
+源码：[nanobot/agent/memory.py:224](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L224)，`MemoryStore.write_memory` 完整方法。
+
 ```python
-# 这里只负责把给定内容写入长期记忆文件。
+# 将给定文本写入长期记忆文件，不负责自动挑选值得保存的知识。
 def write_memory(self, content: str) -> None:
     self.memory_file.write_text(content, encoding="utf-8")
 ```
@@ -432,23 +1021,70 @@ def write_memory(self, content: str) -> None:
 
 ### append_history() 方法
 
-源码：[nanobot/agent/memory.py:303](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L303)
+<a id="method-memorystore-append-history"></a>
+
+源码：[nanobot/agent/memory.py:269](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L269)，`MemoryStore.append_history` 完整方法。
 
 ```python
-# 分配游标与写入必须在同一把锁内完成。
-with self._append_lock:
-    # 分配单调递增位置，供后续整理跟踪进度。
-    cursor = self._next_cursor()
-    # 一条历史包含位置、时间和正文。
-    record = {"cursor": cursor, "timestamp": ts, "content": content}
-    if session_key:
-        record["session_key"] = session_key
-    # 使用追加模式，每条记录写成独立 JSON 行。
-    with open(self.history_file, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    # 保存当前游标，返回值表示本条历史位置。
-    self._cursor_file.write_text(str(cursor), encoding="utf-8")
-return cursor
+# 清理历史条目并应用长度预算，再交给受锁保护的历史写入方法。
+def append_history(
+    self,
+    entry: str,
+    *,
+    max_chars: int | None = None,
+    session_key: str | None = None,
+) -> int:
+    """Append *entry* to history.jsonl and return its auto-incrementing cursor.
+
+    Entries are passed through `strip_think` to drop template-level leaks
+    (e.g. unclosed `<think` prefixes, `<channel|>` markers) before being
+    persisted. If the cleaned content is empty but the raw entry wasn't,
+    the record is persisted with an empty string rather than falling back
+    to the raw leak — otherwise `strip_think`'s guarantees would be
+    undone when Dream consumes the journal entry.
+
+    A defensive cap (*max_chars*, default ``_HISTORY_ENTRY_HARD_CAP``) is
+    applied as a final safety net: individual callers should cap their own
+    content more tightly; this default only exists to catch unintentional
+    large writes (e.g. an LLM echoing its input back as a "summary").
+    """
+    # 先清理可能泄漏的模板内容并应用条目长度预算。
+    content = self._normalize_history_entry(entry, max_chars=max_chars)
+    if entry.rstrip() and not content:
+        logger.debug(
+            "history entry stripped to empty (likely template leak); "
+            "persisting empty content to avoid re-polluting Dream input",
+        )
+    # 把已清理内容交给原子追加入口，并返回历史游标。
+    return self._append_history_record(content, session_key=session_key)
+```
+
+`append_history()` 委托的历史追加方法如下：
+
+<a id="method-memorystore-append-history-record"></a>
+
+源码：[nanobot/agent/memory.py:298](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L298)，`MemoryStore._append_history_record` 完整方法。
+
+```python
+# 原子分配历史游标并追加一行 JSON，防止并发写入重复游标。
+def _append_history_record(self, content: str, *, session_key: str | None = None) -> int:
+    """Persist already sanitized, bounded content without rewriting chunk edges."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # Cursor allocation and the append must be atomic: concurrent writers
+    # could otherwise read the same current cursor and emit duplicates.
+    # 游标分配与追加写入在同一把锁内完成。
+    with self._append_lock:
+        # 分配新的递增位置，供后续历史整理跟踪进度。
+        cursor = self._next_cursor()
+        record = {"cursor": cursor, "timestamp": ts, "content": content}
+        if session_key:
+            record["session_key"] = session_key
+        # 追加写入 JSONL，每条历史占一行。
+        with open(self.history_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        # 保存当前游标，防止下次分配重复位置。
+        self._cursor_file.write_text(str(cursor), encoding="utf-8")
+    return cursor
 ```
 
 **关键点解读：**当前入口接收字符串条目并返回游标，且是同步方法，不是旧例子中 `await append_history(turn_summary)`。JSONL 便于逐条读取；游标用于定位整理进度，不能与截取用户前多少字符混为一谈。具体长度预算应查看该方法参数和调用方。
@@ -477,22 +1113,40 @@ return cursor
 
 ### spawn() 方法
 
-源码：[nanobot/agent/subagent.py:625](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py#L625)
+<a id="method-subagentmanager-spawn"></a>
+
+源码：[nanobot/agent/subagent.py:609](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py#L609)，`SubagentManager.spawn` 完整方法。
 
 ```python
-# 创建失败转为工具错误；创建成功不表示任务已完成。
-try:
-    # 将任务说明、来源、运行条件交给实际创建入口。
-    record = await self._create_task(
-        task, label, origin_channel, origin_chat_id, session_key,
-        origin_message_id, temperature, workspace_scope, runtime, announce=True, origin_turn_id=origin_turn_id,
-        session_policy=session_policy,
-    )
-except SubagentControlError as exc:
-    return ToolResult.error(f"Error: {exc}")
-# 读取刚创建任务的状态，用任务 ID 关联后续查询。
-status = record.status
-return f"Subagent [{status.label}] started (id: {status.task_id}). I'll notify you when it completes."
+# 创建有来源信息的子任务，返回任务状态和标识；创建回执不等于执行完成。
+async def spawn(
+    self,
+    task: str,
+    label: str | None = None,
+    origin_channel: str = "cli",
+    origin_chat_id: str = "direct",
+    session_key: str | None = None,
+    origin_message_id: str | None = None,
+    temperature: float | None = None,
+    workspace_scope: WorkspaceScope | None = None,
+    *,
+    runtime: LLMRuntime | None = None,
+    origin_turn_id: str | None = None,
+    session_policy: SessionPolicy | None = None,
+) -> str:
+    """Start background work and route its terminal result to the parent."""
+    try:
+        # 创建子任务记录并安排执行，保留来源与运行条件。
+        record = await self._create_task(
+            task, label, origin_channel, origin_chat_id, session_key,
+            origin_message_id, temperature, workspace_scope, runtime, announce=True, origin_turn_id=origin_turn_id,
+            session_policy=session_policy,
+        )
+    # 处理 SubagentControlError，按本方法约定记录、转换或继续传播错误。
+    except SubagentControlError as exc:
+        return ToolResult.error(f"Error: {exc}")
+    status = record.status
+    return f"Subagent [{status.label}] started (id: {status.task_id}). I'll notify you when it completes."
 ```
 
 **关键点解读：**创建任务不代表立即完成；达到并发上限后需要排队；取消、查询与结果回传都需要明确的任务标识。当前配置默认并发子任务数为 4，迭代预算来自配置，不要沿用旧示例固定 15 轮的说法。
@@ -507,33 +1161,44 @@ return f"Subagent [{status.label}] started (id: {status.task_id}). I'll notify y
 
 Registry 是“名称到工具实例”的索引，同时承担调用准备与执行入口。注册不是执行；模型看到的定义也不是 Python 函数本身。
 
-源码：[nanobot/agent/tools/registry.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L29)，`ToolRegistry`。
-
-```python
-# 执行之前先完成工具查找、参数转换与校验。
-tool, params, error = self.prepare_call(name, params)
-# 参数错误时直接返回，不发生工具副作用。
-if error:
-    return ToolResult.error(with_tool_error_hint(str(error)))
-```
+完整的 `ToolRegistry.execute()` 已在[本章前文](#method-toolregistry-execute)列出，可结合此处讲解对照阅读。
 
 **关键点解读：**`prepare_call` 查找工具并规范、校验参数；错误先返回 `ToolResult.error`；只有通过后才进入 `execute`。源码后半段还处理工具返回的错误及异常。学习重点是“校验在副作用前”，不是背错误提示文字。
 
 ### 4.7.2 MCPToolWrapper - mcp.py
 
-源码：[nanobot/agent/tools/mcp.py:744](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L744)
+<a id="method-mcptoolwrapper-execute"></a>
+
+源码：[nanobot/agent/tools/mcp.py:743](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L743)，`MCPToolWrapper.execute` 完整方法。
 
 ```python
-# 通过受管理的请求与恢复入口调用远端工具。
-result = await self._request_with_recovery(
-    # 原始远端工具名与本次参数传给 MCP 会话。
-    lambda session: session.call_tool(self._original_name, arguments=kwargs),
-    self._tool_timeout,
-    "tool",
-)
-# 内部已产生 ToolResult 时直接沿用。
-if isinstance(result, ToolResult):
-    return result
+# 通过已管理的 MCP 会话调用远端工具，渲染结果并保留错误语义。
+async def execute(self, **kwargs: Any) -> str:
+    # 使用 MCP 管理的会话、超时与恢复路径调用远端工具。
+    result = await self._request_with_recovery(
+        lambda session: session.call_tool(self._original_name, arguments=kwargs),
+        self._tool_timeout,
+        "tool",
+    )
+    if isinstance(result, ToolResult):
+        return result
+    try:
+        rendered = self._render_call_result(result.content, kwargs)
+        # 保持远端错误语义，不把错误响应误当成正常文本。
+        if getattr(result, "isError", False):
+            return ToolResult.error(rendered)
+        return rendered
+    # 处理 Exception，按本方法约定记录、转换或继续传播错误。
+    except Exception as exc:
+        logger.opt(exception=tool_log_content_allowed()).error(
+            "MCP tool '{}' failed while rendering result: {}: {}",
+            self._name,
+            type(exc).__name__,
+            exc if tool_log_content_allowed() else "[content hidden]",
+        )
+        return ToolResult.error(
+            f"(MCP tool returned malformed content: {type(exc).__name__})"
+        )
 ```
 
 **关键点解读：**包装器让 Runner 不必分别理解每个远端服务；连接生命周期由 Provider 管理，不能每次工具调用临时拼一个裸 HTTP 请求。远端执行返回错误也需要保持错误语义，不能把它当成功文本。
@@ -546,22 +1211,185 @@ MessageTool 允许模型主动发送消息。读源码时跟踪三件事：目�
 
 **关键点解读：**工具发送消息属于一次副作用，Runner 的最终回复属于轮次输出，两者不是同一个动作。实现还需记录已发送内容等状态，避免把主动发送与最终交付混为一谈。不要在客户端重写这套后端交付规则。
 
+
+<details>
+<summary>展开 MessageTool.execute() 完整方法（120 行源码）</summary>
+
+<a id="method-messagetool-execute"></a>
+
+源码：[nanobot/agent/tools/message.py:141](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/message.py#L141)，`MessageTool.execute` 完整方法。
+
+```python
+# 根据本轮上下文和参数发送主动消息，并记录发送结果。
+async def execute(
+    self,
+    content: str,
+    channel: str | None = None,
+    chat_id: str | None = None,
+    message_id: str | None = None,
+    media: list[str] | None = None,
+    buttons: Any = None,
+    **kwargs: Any,
+) -> str:
+    from nanobot.utils.helpers import strip_think
+
+    content = strip_think(content)
+
+    button_rows: list[list[str]] | None = None
+    if buttons is not None:
+        raw_buttons = cast(list[Any], buttons) if isinstance(buttons, list) else None
+        if raw_buttons is None or any(
+            not isinstance(row, list)
+            or any(not isinstance(label, str) for label in cast(list[Any], row))
+            for row in raw_buttons
+        ):
+            return ToolResult.error("Error: buttons must be a list of list of strings")
+        button_rows = cast(list[list[str]], raw_buttons)
+    request_ctx = current_request_context()
+    default_channel = (
+        request_ctx.channel if request_ctx is not None else self._fallback_channel
+    )
+    default_chat_id = (
+        request_ctx.chat_id if request_ctx is not None else self._fallback_chat_id
+    )
+    default_message_id = (
+        request_ctx.message_id
+        if request_ctx is not None
+        else self._fallback_message_id
+    )
+    default_metadata = (
+        request_ctx.metadata
+        if request_ctx is not None
+        else self._fallback_metadata
+    )
+    channel = channel or default_channel
+    explicit_chat_id = chat_id
+    if (
+        default_channel == "websocket"
+        and channel == "websocket"
+        and explicit_chat_id is not None
+        and str(explicit_chat_id).strip() != ""
+        and str(explicit_chat_id).strip() != str(default_chat_id).strip()
+    ):
+        return ToolResult.error(
+            "Error: chat_id does not match the active WebSocket conversation. "
+            "Omit chat_id (and usually channel) so delivery uses the current "
+            "conversation id from context — WebSocket client_id strings "
+            "(e.g. anon-…) are not chat ids."
+        )
+    chat_id = chat_id or default_chat_id
+    # Only inherit default message_id when targeting the same channel+chat.
+    # Cross-chat sends must not carry the original message_id, because
+    # some channels (e.g. Feishu) use it to determine the target
+    # conversation via their Reply API, which would route the message
+    # to the wrong chat entirely.
+    same_target = channel == default_channel and chat_id == default_chat_id
+    if same_target:
+        message_id = message_id or default_message_id
+    else:
+        message_id = None
+
+    if not channel or not chat_id:
+        return ToolResult.error("Error: No target channel/chat specified")
+
+    if not self._send_callback:
+        return ToolResult.error("Error: Message sending not configured")
+
+    if media:
+        try:
+            media = self._resolve_media(media)
+        # 处理 (OSError, PermissionError, ValueError)，按本方法约定记录、转换或继续传播错误。
+        except (OSError, PermissionError, ValueError) as e:
+            return ToolResult.error(f"Error: media path is not allowed: {str(e)}")
+
+    metadata = dict(default_metadata) if same_target else {}
+    if message_id:
+        metadata["message_id"] = message_id
+    if media:
+        metadata["_record_channel_delivery"] = True
+    if same_target and request_ctx is not None and request_ctx.session_generation is not None:
+        metadata["_session_key"] = request_ctx.session_key
+        metadata["_session_generation"] = request_ctx.session_generation
+
+    msg = OutboundMessage(
+        channel=channel,
+        chat_id=chat_id,
+        content=content,
+        media=media or [],
+        buttons=button_rows or [],
+        metadata=metadata,
+        delivery=(DeliveryRequest.from_context(
+            default_metadata, request_ctx.session_key, request_ctx.session_generation,
+        ) if request_ctx is not None else None),
+    )
+
+    if self._suppress_delivery_var.get():
+        logger.debug("MessageTool: delivery suppressed during internal check")
+        return f"Message acknowledged for {channel}:{chat_id} (not delivered)"
+
+    try:
+        await self._send_callback(msg)
+        sends = _CURRENT_MESSAGE_SENDS.get()
+        if sends is not None:
+            sends.add((channel, chat_id))
+        media_info = f" with {len(media)} attachments" if media else ""
+        button_info = (
+            f" with {sum(len(row) for row in button_rows)} button(s)"
+            if button_rows
+            else ""
+        )
+        action = "queued" if msg.delivery is not None else "sent"
+        return f"Message {action} to {channel}:{chat_id}{media_info}{button_info}"
+    # 处理 Exception，按本方法约定记录、转换或继续传播错误。
+    except Exception as e:
+        return ToolResult.error(f"Error sending message: {str(e)}")
+```
+
+</details>
+
 ### 4.7.4 SpawnTool - spawn.py
 
 这里保留原教程“用工具创建子任务”的位置。新版文件为 `tools/subagent.py`，类为 `SubagentTool`，工具名为 `subagent`。
 
-源码：[nanobot/agent/tools/subagent.py:91](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/subagent.py#L91)
+<a id="method-subagenttool-execute"></a>
+
+源码：[nanobot/agent/tools/subagent.py:86](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/subagent.py#L86)，`SubagentTool.execute` 完整方法。
 
 ```python
-# 先处理创建动作，其余动作使用已有任务标识。
-if action == "create":
-    # 拒绝空任务，防止创建没有实际目标的子任务。
-    if not task or not task.strip():
-        return ToolResult.error("Error: create requires a non-empty task")
-    # 创建和等待策略委托给专门入口。
-    return await self._create_task(task, label, temperature, wait)
-# 后续查询、发送和取消使用请求会话标识核对归属。
-owner = current_request_session_key()
+# 按动作创建、查询、发送输入或取消子任务，并核对任务归属。
+async def execute(
+    self, action: str, task_id: str | None = None, message: str | None = None,
+    task: str | None = None, label: str | None = None,
+    temperature: float | None = None, wait: bool = False, **kwargs: Any,
+) -> str:
+    # 创建动作需要非空任务说明；其他动作管理已有任务。
+    if action == "create":
+        if not task or not task.strip():
+            return ToolResult.error("Error: create requires a non-empty task")
+        return await self._create_task(task, label, temperature, wait)
+    # 取得调用会话身份，用于查询、发送和取消时核对任务归属。
+    owner = current_request_session_key()
+    try:
+        if action == "check":
+            if not owner:
+                raise SubagentControlError("task unavailable")
+            if task_id is not None:
+                return json.dumps(self._manager.check(task_id, owner).as_dict(), ensure_ascii=False)
+            return json.dumps({
+                "tasks": [status.as_dict()
+                          for status in self._manager.statuses_for_session(owner, include_history=False).values()],
+            }, ensure_ascii=False)
+        if action in {"send", "cancel"}:
+            if not task_id:
+                return ToolResult.error(f"Error: {action} requires task_id")
+            if action == "send":
+                return json.dumps(await self._manager.send(task_id, owner, message))
+            status = await self._manager.cancel(task_id, owner)
+            return json.dumps(status.as_dict(), ensure_ascii=False)
+        return ToolResult.error("Error: unknown subagent action")
+    # 处理 SubagentControlError，按本方法约定记录、转换或继续传播错误。
+    except SubagentControlError as exc:
+        return ToolResult.error(f"Error: {exc}")
 ```
 
 **关键点解读：**模型通过统一工具接口提出管理任务的请求，SubagentManager 才负责真实调度。新版已不只是一个 `spawn(task)` 动作，阅读时要分清工具层的动作分派与管理器层的任务执行。
@@ -574,13 +1402,15 @@ owner = current_request_session_key()
 
 消息总线把平台输入与 Agent 执行解耦。新版源码位于 `bus/queue.py`，输入消息结构在 `bus/events.py`。
 
-源码：[nanobot/bus/queue.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/queue.py#L44)，`MessageBus.consume_inbound`。
+<a id="method-messagebus-consume-inbound"></a>
+
+源码：[nanobot/bus/queue.py:44](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/queue.py#L44)，`MessageBus.consume_inbound` 完整方法。
 
 ```python
-# 消费统一输入队列，无消息时异步等待。
+# 从统一输入队列异步取出一条消息。
 async def consume_inbound(self) -> InboundMessage:
     """Consume the next inbound message (blocks until available)."""
-    # 这里只取输入，不执行模型与工具循环。
+    # 等待并取走一条输入，不在总线中执行模型循环。
     return await self.inbound.get()
 ```
 
@@ -600,19 +1430,18 @@ BaseChannel 定义启动、停止和发送等共享契约。平台 SDK、消息�
 
 ### Telegram 适配器示例
 
-源码：[nanobot/channels/telegram/runtime.py:1943](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/telegram/runtime.py#L1943)
+<a id="method-telegramchannel-on-message"></a>
+
+源码：[nanobot/channels/telegram/runtime.py:1943](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/telegram/runtime.py#L1943)，`TelegramChannel._on_message` 完整方法。
 
 ```python
-# 平台消息回调只负责接收和安排处理。
+# 校验平台更新并进入有序处理路径，避免消息处理乱序。
 async def _on_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # 没有消息或有效用户时忽略该事件。
     if not update.message or not update.effective_user:
         return
-    # 尚未进入运行状态时使用直接处理路径。
     if not self._running:
         await self._process_message_update(update)
         return
-    # 正常运行时进入有序队列，避免更新处理乱序。
     self._enqueue_ordered_update(kind="message", update=update)
 ```
 
@@ -624,9 +1453,233 @@ async def _on_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 飞书同样把平台事件转换为统一输入，但需要处理自己的事件结构、提及、群聊与回复地址。与 Telegram 对照阅读：平台特有解析不同，进入消息总线之后共享的执行链路相同。新增平台的主要工作应落在适配层，而不是复制整个 ReAct 循环。
 
+<details>
+<summary>展开 FeishuChannel._on_message() 完整方法（206 行源码）</summary>
+
+<a id="method-feishuchannel-on-message"></a>
+
+源码：[nanobot/channels/feishu/runtime.py:2547](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/feishu/runtime.py#L2547)，`FeishuChannel._on_message` 完整方法。
+
+```python
+# 解析飞书事件、会话地址与媒体，将平台输入交给统一渠道处理流程。
+async def _on_message(self, data: P2ImMessageReceiveV1) -> None:
+    if not self._running:
+        return
+    try:
+        event = data.event
+        if event is None or event.message is None or event.sender is None:
+            self.logger.warning("Ignoring incomplete Feishu message event")
+            return
+        message = event.message
+        sender = event.sender
+
+        self.logger.debug("raw message: {}", message.content)
+        self.logger.debug("mentions: {}", getattr(message, "mentions", None))
+
+        message_id = message.message_id
+
+        if sender.sender_type == "bot":
+            return
+
+        sender_id = sender.sender_id.open_id if sender.sender_id else "unknown"
+        chat_id = message.chat_id
+        chat_type = message.chat_type
+        msg_type = message.message_type
+        if not all(isinstance(value, str) and value for value in (
+            message_id,
+            sender_id,
+            chat_id,
+            chat_type,
+            msg_type,
+        )):
+            self.logger.warning("Ignoring Feishu message event with missing routing fields")
+            return
+        message_id = cast(str, message_id)
+        sender_id = cast(str, sender_id)
+        chat_id = cast(str, chat_id)
+        chat_type = cast(str, chat_type)
+        msg_type = cast(str, msg_type)
+
+        if chat_type == "group" and not self._is_group_message_for_bot(message):
+            self.logger.debug("skipping group message (not mentioned)")
+            return
+
+        if message_id in self._processed_message_ids:
+            return
+        self._processed_message_ids[message_id] = None
+
+        while len(self._processed_message_ids) > 1000:
+            self._processed_message_ids.popitem(last=False)
+
+        # Early permission check — avoid side effects for unauthorized users.
+        # Group chats are silently ignored; DMs get a pairing code.
+        if not self.is_allowed(sender_id):
+            if chat_type == "p2p":
+                # content="" because the pairing reply is generated by
+                # BaseChannel._handle_message, not from the original message.
+                await self._handle_message(
+                    sender_id=sender_id,
+                    chat_id=sender_id,
+                    content="",
+                    is_dm=True,
+                )
+            return
+
+        task = asyncio.create_task(
+            self._add_reaction(message_id, self.config.react_emoji)
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._on_background_task_done)
+        task.add_done_callback(lambda t: self._on_reaction_added(message_id, t))
+
+        content_parts: list[str] = []
+        media_paths: list[str] = []
+
+        try:
+            raw_content = message.content if isinstance(message.content, str) else ""
+            content_json = _as_json_object(json.loads(raw_content)) if raw_content else {}
+        # 处理 json.JSONDecodeError，按本方法约定记录、转换或继续传播错误。
+        except json.JSONDecodeError:
+            content_json = {}
+        content_json = content_json or {}
+
+        if msg_type == "text":
+            text = content_json.get("text", "")
+            if isinstance(text, str) and text:
+                mentions = getattr(message, "mentions", None)
+                text = self._strip_leading_bot_mention(text, mentions)
+                text = self._resolve_mentions(text, mentions)
+                content_parts.append(text)
+
+        elif msg_type == "post":
+            text, image_keys = _extract_post_content(content_json)
+            if text:
+                content_parts.append(text)
+            for img_key in image_keys:
+                file_path, content_text = await self._download_and_save_media(
+                    "image", {"image_key": img_key}, message_id
+                )
+                if file_path:
+                    media_paths.append(file_path)
+                content_parts.append(content_text)
+            # Some posts include files alongside the text and images.
+            post_files, post_folders = _extract_post_attachments(content_json)
+            for folder_name in post_folders:
+                content_parts.append(
+                    f"[folder: {folder_name} — folder attachments cannot be downloaded; "
+                    "ask the user to send a zip archive]"
+                )
+            for entry in post_files:
+                file_path, content_text = await self._download_and_save_media(
+                    "file", entry, message_id
+                )
+                if file_path:
+                    media_paths.append(file_path)
+                content_parts.append(content_text)
+
+        elif msg_type in ("image", "audio", "file", "media"):
+            file_path, content_text = await self._download_and_save_media(
+                msg_type, content_json, message_id
+            )
+            if file_path:
+                media_paths.append(file_path)
+
+            if msg_type == "audio" and file_path:
+                transcription = await self.transcribe_audio(file_path)
+                if transcription:
+                    content_text = f"[transcription: {transcription}]"
+
+            content_parts.append(content_text)
+
+        elif msg_type in (
+            "share_chat",
+            "share_user",
+            "interactive",
+            "share_calendar_event",
+            "system",
+            "merge_forward",
+        ):
+            text = _extract_share_card_content(content_json, msg_type)
+            if text:
+                content_parts.append(text)
+
+        else:
+            content_parts.append(MSG_TYPE_MAP.get(msg_type, f"[{msg_type}]"))
+
+        parent_id = getattr(message, "parent_id", None)
+        root_id = getattr(message, "root_id", None)
+        thread_id = getattr(message, "thread_id", None)
+        parent_id = parent_id if isinstance(parent_id, str) else None
+        root_id = root_id if isinstance(root_id, str) else None
+        thread_id = thread_id if isinstance(thread_id, str) else None
+
+        if parent_id and self._client:
+            loop = asyncio.get_running_loop()
+            reply_ctx = await loop.run_in_executor(
+                None, self._get_message_content_sync, parent_id
+            )
+            if reply_ctx:
+                content_parts.insert(0, reply_ctx)
+
+        content = "\n".join(content_parts) if content_parts else ""
+
+        if not content and not media_paths:
+            return
+
+        if chat_type == "p2p" and normalize_command_text(content).lower() == "/new":
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                self._send_message_sync,
+                "open_id",
+                sender_id,
+                "system",
+                _NEW_SESSION_DIVIDER_CONTENT,
+            )
+
+        # Build session key for conversation isolation.
+        # If topic_isolation is True: each topic gets its own session via root_id/message_id.
+        # If topic_isolation is False: all messages in group share the same session.
+        # Private chat: no override — same behavior as Telegram/Slack.
+        if chat_type == "group":
+            if self.config.topic_isolation:
+                session_key = f"{self.name}:{chat_id}:{root_id or message_id}"
+            else:
+                session_key = f"{self.name}:{chat_id}"
+        else:
+            session_key = None
+
+        reply_to = chat_id if chat_type == "group" else sender_id
+        await self._handle_message(
+            sender_id=sender_id,
+            chat_id=reply_to,
+            content=content,
+            media=media_paths,
+            metadata={
+                "message_id": message_id,
+                "chat_type": chat_type,
+                "msg_type": msg_type,
+                "parent_id": parent_id,
+                "root_id": root_id,
+                "thread_id": thread_id,
+            },
+            session_key=session_key,
+            is_dm=chat_type == "p2p",
+        )
+
+    # 处理 Exception，按本方法约定记录、转换或继续传播错误。
+    except Exception:
+        self.logger.exception("Error processing message")
+```
+
+</details>
+
 <a id="section-4-10"></a>
 
 ## 4.10 配置系统 - config/schema.py
+
+
+
 
 ### 配置数据类
 
@@ -638,24 +1691,110 @@ async def _on_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 ### 配置加载
 
-源码：[nanobot/config/loader.py:111](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/config/loader.py#L111)
+<a id="method-load-config"></a>
+
+源码：[nanobot/config/loader.py:36](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/config/loader.py#L36)，`load_config` 完整方法。
 
 ```python
-# 先迁移旧字段到当前配置结构。
-data = _migrate_config(cast(dict[str, Any], data))
-# JSON 语法通过后，还必须做类型和字段校验。
-try:
-    # 构造当前 Pydantic 配置模型。
-    config = Config.model_validate(data)
-except ValidationError as exc:
-    # 把校验问题转换成可定位的配置加载错误。
-    issues = validation_issues(exc)
-    raise ConfigLoadError(
-        path,
-        kind="invalid_schema",
-        summary=f"Found {len(issues)} invalid setting(s).",
-        issues=issues,
-    ) from exc
+# 读取、迁移并校验配置，区分缺失、解析错误和结构错误。
+def load_config(config_path: Path | None = None) -> Config:
+    """
+    Load configuration from file or create default.
+
+    Args:
+        config_path: Optional path to config file. Uses default if not provided.
+
+    Returns:
+        Loaded configuration object.
+    """
+    path = config_path or get_config_path()
+
+    if not path.exists():
+        try:
+            config = Config()
+        # 处理 SettingsError，按本方法约定记录、转换或继续传播错误。
+        except SettingsError as exc:
+            raise ConfigLoadError(
+                path,
+                kind="invalid_schema",
+                summary=(
+                    "Environment-based configuration could not be parsed. "
+                    "Check that complex NANOBOT_* values use valid JSON."
+                ),
+            ) from exc
+        # 处理 ValidationError，按本方法约定记录、转换或继续传播错误。
+        except ValidationError as exc:
+            raise ConfigLoadError(
+                path,
+                kind="invalid_schema",
+                summary="Environment-based configuration is invalid.",
+                issues=validation_issues(exc),
+            ) from exc
+        config.bind_source_path(path)
+        _apply_ssrf_whitelist(config)
+        return config
+
+    try:
+        with path.open(encoding="utf-8") as handle:
+            data = json.load(handle)
+    # 处理 json.JSONDecodeError，按本方法约定记录、转换或继续传播错误。
+    except json.JSONDecodeError as exc:
+        raise ConfigLoadError(
+            path,
+            kind="invalid_json",
+            summary=(
+                f"JSON syntax error at line {exc.lineno}, column {exc.colno}: "
+                f"{_sentence(exc.msg)}"
+            ),
+        ) from exc
+    # 处理 UnicodeDecodeError，按本方法约定记录、转换或继续传播错误。
+    except UnicodeDecodeError as exc:
+        raise ConfigLoadError(
+            path,
+            kind="io_error",
+            summary="The file is not valid UTF-8.",
+        ) from exc
+    # 处理 OSError，按本方法约定记录、转换或继续传播错误。
+    except OSError as exc:
+        detail = exc.strerror or type(exc).__name__
+        raise ConfigLoadError(
+            path,
+            kind="io_error",
+            summary=f"Unable to read the file: {_sentence(detail)}",
+        ) from exc
+
+    if not isinstance(data, dict):
+        root_type = type(data).__name__
+        raise ConfigLoadError(
+            path,
+            kind="invalid_root",
+            summary="The top level of config.json must be a JSON object.",
+            issues=(
+                ConfigIssue(
+                    path=(),
+                    message=f"Expected an object, but found {root_type}.",
+                ),
+            ),
+        )
+
+    # 迁移旧字段后再用当前 Schema 校验。
+    data = _migrate_config(cast(dict[str, Any], data))
+    try:
+        # JSON 可解析不代表配置有效；这里校验类型和字段约束。
+        config = Config.model_validate(data)
+    # 处理 ValidationError，按本方法约定记录、转换或继续传播错误。
+    except ValidationError as exc:
+        issues = validation_issues(exc)
+        raise ConfigLoadError(
+            path,
+            kind="invalid_schema",
+            summary=f"Found {len(issues)} invalid setting(s).",
+            issues=issues,
+        ) from exc
+
+    config.bind_source_path(path)
+    _apply_ssrf_whitelist(config)
+    return config
 ```
 
 **关键点解读：**JSON 能解析只证明语法有效，Pydantic 校验通过才说明满足配置结构；API Key 可用、模型服务可达仍需实际请求验证。`${VAR}` 是配置环境变量引用语法，不是把 PowerShell 的 `$env:VAR` 原样填进 JSON。
@@ -666,46 +1805,206 @@ except ValidationError as exc:
 
 ### 片段 1：完整的消息处理链路
 
-源码：[nanobot/agent/loop.py:1940](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L1940)
+<details>
+<summary>展开 AgentLoop._process_message() 完整方法（108 行源码）</summary>
+
+<a id="method-agentloop-process-message"></a>
+
+源码：[nanobot/agent/loop.py:1844](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L1844)，`AgentLoop._process_message` 完整方法。
 
 ```python
-# 日志携带轮次与会话标识，便于关联一条输入。
-with logger.contextualize(turn_id=ctx.turn_id, session_key=ctx.session_key):
-    # 恢复会话，再按需要整理上下文。
-    await self._run_turn_stage(ctx, "restore", self._restore_turn)
-    await self._run_turn_stage(ctx, "compact", self._compact_session)
-    # 命令可能提前完成，因此并非每次都调用模型。
-    if await self._run_turn_stage(ctx, "command", self._dispatch_command):
-        self._log_turn_completion(ctx, outcome="command")
+# 为一条输入创建轮次上下文，顺序执行恢复、压缩、命令、构建、运行、保存和回复。
+async def _process_message(
+    self,
+    msg: InboundMessage,
+    session_key: str | None = None,
+    on_progress: Callable[..., Awaitable[None]] | None = None,
+    on_stream: Callable[[str], Awaitable[None]] | None = None,
+    on_stream_end: Callable[..., Awaitable[None]] | None = None,
+    pending_queue: asyncio.Queue[InboundMessage] | None = None,
+    ephemeral: bool = False,
+    run_extra_hooks_for_ephemeral: bool = False,
+    hooks: list[AgentHook] | None = None,
+    hook_factories: list[AgentTurnHookFactory] | None = None,
+    tools: ToolRegistry | None = None,
+    runtime: LLMRuntime | None = None,
+    delivery: TurnDelivery | None = None,
+    on_runtime_admitted: Callable[[LLMRuntime], Awaitable[None]] | None = None,
+    attributes: Mapping[str, Any] | None = None,
+    session: Session | None = None,
+) -> OutboundMessage | None:
+    kind = TurnKind.USER if msg.is_user_input else TurnKind.SYSTEM
+    if kind is TurnKind.SYSTEM:
+        destination = (
+            msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id)
+        )
+        key = session_key or msg.session_key_override or f"{destination[0]}:{destination[1]}"
+    else:
+        key = session_key or msg.session_key
+    if not self.subagents.accepts_result(msg, key):
+        return None
+    commit_session = session is None or session.policy.persist
+    if session is None:
+        session = (await self.sessions.state.read(key)
+                   if msg.require_existing_session or msg.session_generation is not None
+                   else await self.sessions.state.get(key))
+    if msg.require_existing_session and session is None:
+        raise RuntimeError("required session is not active")
+    if msg.session_generation is not None and (
+        session is None or session.generation != msg.session_generation
+    ):
+        raise RuntimeError("required session generation was replaced")
+    if delivery is None:
+        delivery = self.turn_delivery_factory.create(msg, key)
+    elif delivery.session_key != key:
+        raise ValueError("turn delivery session does not match the processing session")
+    t0 = time.time()
+    ctx = TurnContext(
+        msg=msg,
+        session=session,
+        session_key=key,
+        turn_id=f"{key}:{time.time_ns()}",
+        runtime=runtime,
+        kind=kind,
+        delivery=delivery,
+        original_user_text=(
+            None
+            if kind is TurnKind.SYSTEM
+            or turn_continuation.internal_continuation_inbound(msg.metadata)
+            else msg.content
+        ),
+        turn_wall_started_at=t0,
+        events=output_events(
+            default=delivery.events,
+            on_progress=on_progress,
+            on_stream=on_stream,
+            on_stream_end=on_stream_end,
+        ),
+        streaming=on_stream is not None or delivery.streaming,
+        on_runtime_admitted=on_runtime_admitted,
+        pending_queue=pending_queue,
+        ephemeral=ephemeral,
+        commit_session=commit_session,
+        run_extra_hooks_for_ephemeral=run_extra_hooks_for_ephemeral,
+        hooks=list(hooks or []),
+        hook_factories=list(hook_factories or []),
+        tools=tools,
+        attributes=dict(attributes or {}),
+    )
+    # A streaming callback may be present even when the final text comes from a
+    # non-streaming recovery. Only the last completed segment can suppress the
+    # regular outbound message.
+    if ctx.streaming:
+        publish = ctx.events.publish
+        segment_streamed_content = False
+
+        async def track_output(event: AgentEvent) -> None:
+            nonlocal segment_streamed_content
+            if isinstance(event, StreamDeltaEvent) and event.content:
+                segment_streamed_content = True
+            elif isinstance(event, StreamEndEvent):
+                ctx.streamed_content = segment_streamed_content
+                segment_streamed_content = False
+            if publish is not None:
+                await publish(event)
+
+        ctx.events = EventSink(track_output, ctx.events.accepts)
+
+    with logger.contextualize(turn_id=ctx.turn_id, session_key=ctx.session_key):
+        await self._run_turn_stage(ctx, "restore", self._restore_turn)
+        await self._run_turn_stage(ctx, "compact", self._compact_session)
+        if await self._run_turn_stage(ctx, "command", self._dispatch_command):
+            self._log_turn_completion(ctx, outcome="command")
+            return ctx.outbound
+        await self._run_turn_stage(ctx, "build", self._build_turn)
+        await self._run_turn_stage(ctx, "run", self._run_turn)
+        await self._run_turn_stage(ctx, "save", self._persist_turn)
+        await self._run_turn_stage(ctx, "respond", self._prepare_outbound)
+        self._log_turn_completion(ctx)
         return ctx.outbound
-    # 构建上下文后进入模型工具运行阶段。
-    await self._run_turn_stage(ctx, "build", self._build_turn)
-    await self._run_turn_stage(ctx, "run", self._run_turn)
-    # 保存会话，再准备对外回复。
-    await self._run_turn_stage(ctx, "save", self._persist_turn)
-    await self._run_turn_stage(ctx, "respond", self._prepare_outbound)
-    self._log_turn_completion(ctx)
-    return ctx.outbound
 ```
+
+</details>
 
 **关键点解读：**这是阶段关系图，不是所有请求都会走完的强制调用栈。例如命令可能提前结束。先用这条线定位某个功能归谁管，再进入具体方法；不要在多个章节重复粘贴整段单轮编排代码。
 
 ### 片段 2：MCP 工具注册流程
 
-源码：[nanobot/agent/tools/mcp.py:1451](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L1451)
+<a id="method-mcpprovider-connect"></a>
+
+源码：[nanobot/agent/tools/mcp.py:1425](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L1425)，`MCPProvider.connect` 完整方法。
 
 ```python
-# 只选择已配置、当前缺失且不在等待授权的服务。
-missing_servers = {
-    name: cfg
-    for name, cfg in configured_missing.items()
-    if name not in authorization_pending
-}
-# 没有需要连接的服务时提前返回。
-if not missing_servers:
-    return
-# 先发布 connecting 状态，实际连接在后续代码执行。
-self._set_runtime_status(missing_servers, "connecting")
+# 筛选尚未连接且授权条件满足的服务，管理连接状态和关闭期间的资源回收。
+async def connect(self) -> None:
+    """Connect configured servers that are not currently live."""
+    async with self._lock:
+        if self._closing:
+            return
+        # 只选择已配置但当前尚未连接的服务。
+        configured_missing = {
+            name: cfg
+            for name, cfg in self._servers.items()
+            if name not in self._connections
+        }
+        oauth_servers = {
+            name: cfg
+            for name, cfg in configured_missing.items()
+            if cfg.auth == "oauth"
+        }
+        authorization_pending: set[str] = set()
+        if oauth_servers:
+            from nanobot.agent.tools.mcp_oauth import mcp_oauth_has_credentials
+
+            authorization_pending = {
+                name
+                for name, cfg in oauth_servers.items()
+                if not mcp_oauth_has_credentials(name, cfg.url)
+            }
+        for name in authorization_pending:
+            self._runtime_statuses.pop(name, None)
+        # 排除尚待授权的服务，避免无效连接尝试。
+        missing_servers = {
+            name: cfg
+            for name, cfg in configured_missing.items()
+            if name not in authorization_pending
+        }
+        if not missing_servers:
+            return
+        self._set_runtime_status(missing_servers, "connecting")
+        try:
+            # 建立服务连接并把发现的工具注册进统一工具表。
+            connected = await connect_mcp_servers(missing_servers, self._registry, network=self._network)
+            if self._closing:
+                await _close_mcp_connections(connected)
+                return
+            # 接管新连接，由 Provider 管理后续恢复和关闭。
+            self._connections.update(connected)
+            self._record_connection_result(missing_servers, connected)
+            self._attach_reconnect_handlers(connected)
+            if connected:
+                logger.info("MCP connected servers: {}", sorted(connected))
+            else:
+                logger.warning(
+                    "No MCP servers connected successfully "
+                    "(will retry on the next readiness check)"
+                )
+        # 单独处理取消信号，避免把真实取消误当成普通运行错误。
+        except asyncio.CancelledError:
+            self._set_runtime_status(missing_servers, "failed")
+            if task_is_cancelling():
+                raise
+            logger.warning(
+                "MCP connection cancelled (will retry on the next readiness check)"
+            )
+        # 处理 BaseException，按本方法约定记录、转换或继续传播错误。
+        except BaseException as exc:
+            self._set_runtime_status(missing_servers, "failed")
+            logger.warning(
+                "Failed to connect MCP servers "
+                "(will retry on the next readiness check): {}",
+                exc,
+            )
 ```
 
 **关键点解读：**发现阶段让模型知道“可以做什么”，调用阶段才真的执行。服务名、远端工具名与本地注册名需要在调试时对应起来；不要把连接成功当作每个工具调用都已成功。
@@ -714,25 +2013,122 @@ self._set_runtime_status(missing_servers, "connecting")
 
 源码：[nanobot/providers/routing.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/providers/routing.py#L1)。
 
-源码：[nanobot/providers/factory.py:61](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/providers/factory.py#L61)
+<details>
+<summary>展开 _make_provider_core() 完整方法（102 行源码）</summary>
+
+<a id="method-make-provider-core"></a>
+
+源码：[nanobot/providers/factory.py:55](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/providers/factory.py#L55)，`_make_provider_core` 完整方法。
 
 ```python
-# 由配置与模型预设解析出实际供应商路由。
-setup = resolve_provider_route(
-    config,
-    preset=preset,
-    model=model,
-)
-# 后续适配器创建使用解析后的模型与供应商。
-model = setup.model
-provider_name = setup.provider_name
-p = setup.provider_config
-spec = setup.spec
-# backend 决定走哪种实现，不必每个服务一个文件。
-backend = setup.backend
-# 按该供应商的代理设置解析实际网络代理。
-proxy = config.network.resolve_proxy(p.use_proxy) if p else None
+# 解析供应商路由，根据后端类型创建适配器，再注入生成参数。
+def _make_provider_core(
+    config: Config,
+    *,
+    preset: ModelPresetConfig,
+    model: str | None = None,
+) -> LLMProvider:
+    # 先解析供应商与后端，再进入对应适配器的构造分支。
+    setup = resolve_provider_route(
+        config,
+        preset=preset,
+        model=model,
+    )
+    model = setup.model
+    provider_name = setup.provider_name
+    p = setup.provider_config
+    spec = setup.spec
+    backend = setup.backend
+    proxy = config.network.resolve_proxy(p.use_proxy) if p else None
+
+    if backend == "openai_codex":
+        from nanobot.providers.openai_codex_provider import OpenAICodexProvider
+
+        provider = OpenAICodexProvider(
+            default_model=model,
+            proxy=proxy,
+            extra_body=p.extra_body if p else None,
+            provider_name=provider_name,
+        )
+    elif backend == "xai_grok":
+        from nanobot.providers.xai_grok_provider import XAIGrokProvider
+
+        provider = XAIGrokProvider(
+            default_model=model,
+            proxy=proxy,
+            extra_body=p.extra_body if p else None,
+            provider_name=provider_name,
+        )
+    elif backend == "azure_openai":
+        from nanobot.providers.azure_openai_provider import AzureOpenAIProvider
+
+        if p is None or p.api_base is None:
+            raise RuntimeError("validated Azure provider setup is missing api_base")
+        provider = AzureOpenAIProvider(
+            api_key=p.api_key or "",
+            api_base=p.api_base,
+            default_model=model,
+            provider_name=provider_name,
+        )
+    elif backend == "github_copilot":
+        from nanobot.providers.github_copilot_provider import GitHubCopilotProvider
+
+        provider = GitHubCopilotProvider(
+            default_model=model, provider_name=provider_name,
+            model_api=setup.model_api,
+        )
+    elif backend == "anthropic":
+        from nanobot.providers.anthropic_provider import AnthropicProvider
+
+        custom_spec = spec if spec and spec.backend == "openai_compat" else None
+        api_key = p.api_key if p else None
+        if custom_spec is not None:
+            api_key = api_key or "no-key"
+        provider = AnthropicProvider(
+            api_key=api_key,
+            api_base=config.get_api_base(model, preset=preset),
+            default_model=model,
+            extra_headers=_provider_extra_headers(spec, p),
+            extra_body=p.extra_body if p else None,
+            extra_query=p.extra_query if p else None,
+            proxy=proxy,
+            spec=custom_spec,
+            provider_name=provider_name,
+        )
+    elif backend == "bedrock":
+        from nanobot.providers.bedrock_provider import BedrockProvider
+
+        provider = BedrockProvider(
+            api_key=p.api_key if p else None,
+            api_base=p.api_base if p else None,
+            default_model=model,
+            region=getattr(p, "region", None) if p else None,
+            profile=getattr(p, "profile", None) if p else None,
+            extra_body=p.extra_body if p else None,
+            provider_name=provider_name,
+        )
+    else:
+        from nanobot.providers.openai_compat_provider import OpenAICompatProvider
+
+        provider = OpenAICompatProvider(
+            api_key=p.api_key if p else None,
+            api_base=config.get_api_base(model, preset=preset),
+            default_model=model,
+            extra_headers=_provider_extra_headers(spec, p),
+            spec=spec,
+            extra_body=p.extra_body if p else None,
+            model_api=setup.model_api,
+            extra_query=p.extra_query if p else None,
+            proxy=proxy,
+            provider_name=provider_name,
+        )
+
+    # 把模型预设中的生成参数注入刚创建的适配器。
+    provider.generation = preset.to_generation_settings()
+    return provider
 ```
+
+</details>
 
 **关键点解读：**“供应商”是配置与路由概念，“适配器”是实现。兼容 OpenAI 协议的多个服务可能共享适配器，因此不需要每出现一个服务就寻找同名 Python 文件。
 

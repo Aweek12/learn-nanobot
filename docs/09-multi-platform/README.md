@@ -1,6 +1,6 @@
 # 09 - 多平台接入与共享客户端
 
-> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。核心源码使用中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
+> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。方法使用本地新版完整源码并配中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
 
 将旧平台伪实现、JSONL检查方式和固定出站节流策略改成当前消息契约、渠道包与交付所有权。
 
@@ -79,26 +79,46 @@ delivery_id: str | None = None
 
 ## 9.3 消息总线与出站
 
-源码：[nanobot/bus/queue.py:38](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/queue.py#L38)，`MessageBus.publish_inbound`。
+<a id="method-messagebus-publish-inbound"></a>
+
+源码：[nanobot/bus/queue.py:38](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/queue.py#L38)，`MessageBus.publish_inbound` 完整方法。
 
 ```python
+# 检查是否允许接纳输入，然后立即入队，不在两步之间让出执行权。
 async def publish_inbound(self, msg: InboundMessage) -> None:
     """Publish a message from a channel to the agent."""
-    # 入队前检查当前是否允许接纳输入。
+    # 接纳检查与下面的立即入队之间没有 await。
     self.admission.check()
     # This queue is unbounded. Admission and enqueue must not yield apart.
+    # 立即入队，保持检查与接纳的连续性。
     self.inbound.put_nowait(msg)
 ```
 
 **关键点解读：**先做 admission 检查，再立即入队，中间没有 await 让出执行权，避免检查通过与真正接纳输入之间出现异步交接空隙。方法是 async 并不意味着每一行都会让出事件循环。
 
-源码：[nanobot/bus/queue.py:54](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/queue.py#L54)，`MessageBus.publish_event`。
+<a id="method-messagebus-publish-event"></a>
+
+源码：[nanobot/bus/queue.py:54](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/queue.py#L54)，`MessageBus.publish_event` 完整方法。
 
 ```python
-# 将事件转成出站消息后复用统一交付队列。
-await self.publish_outbound(outbound_message_for_event(
-    channel=channel, chat_id=chat_id, event=event, metadata=metadata,
-))
+# 把内部事件转换为出站消息，交给统一交付队列。
+async def publish_event(
+    self,
+    event: AgentEvent,
+    *,
+    channel: str,
+    chat_id: str,
+    metadata: Mapping[str, Any] | None = None,
+) -> None:
+    """Queue a typed event using the existing outbound delivery contract.
+
+    The bus transports event values without inspecting their fields. Known
+    events retain their text fallback; channel adapters decide how to render
+    or ignore events they receive.
+    """
+    await self.publish_outbound(outbound_message_for_event(
+        channel=channel, chat_id=chat_id, event=event, metadata=metadata,
+    ))
 ```
 
 **关键点解读：**
@@ -112,11 +132,13 @@ publish用于本地订阅等待；publish_event排队渠道交付。ChannelManag
 
 ## 9.4 渠道契约与包发现
 
-源码：[nanobot/channels/base.py:87](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/base.py#L87)
+<a id="method-basechannel-start"></a>
+
+源码：[nanobot/channels/base.py:87](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/base.py#L87)，`BaseChannel.start` 完整方法。
 
 ```python
-# 抽象方法声明渠道实现必须提供长期监听入口。
 @abstractmethod
+# 声明具体渠道必须提供持续监听平台输入的实现。
 async def start(self) -> None:
     """
     Start the channel and begin listening for messages.
@@ -126,7 +148,6 @@ async def start(self) -> None:
     2. Listens for incoming messages
     3. Forwards messages to the bus via _handle_message()
     """
-    # 基类不直接连接平台，具体实现在渠道包内。
     pass
 ```
 
@@ -134,11 +155,13 @@ async def start(self) -> None:
 
 这是基类要求具体渠道实现的长期任务，不是每来一条消息就重新登录平台。启动负责建立接收路径；Agent 如何推理和执行工具仍在共享后端。
 
-源码：[nanobot/channels/base.py:104](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/base.py#L104)
+<a id="method-basechannel-send"></a>
+
+源码：[nanobot/channels/base.py:104](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/base.py#L104)，`BaseChannel.send` 完整方法。
 
 ```python
-# 渠道发送契约由具体适配器实现。
 @abstractmethod
+# 声明平台发送与失败反馈契约，供渠道管理器统一管理交付。
 async def send(self, msg: OutboundMessage) -> None:
     """
     Send a message through this channel.
@@ -153,7 +176,6 @@ async def send(self, msg: OutboundMessage) -> None:
     Other exceptions have an unknown delivery outcome for scheduled results.
     A normal return confirms this adapter completed, not a recipient read receipt.
     """
-    # 成功返回不等于用户已读，失败需由实现抛出异常。
     pass
 ```
 
@@ -168,15 +190,16 @@ async def send(self, msg: OutboundMessage) -> None:
 
 ## 9.5 会话键与隔离
 
-源码：[nanobot/session/keys.py:21](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/keys.py#L21)，`session_key_for_channel`。
+<a id="method-session-key-for-channel"></a>
+
+源码：[nanobot/session/keys.py:21](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/keys.py#L21)，`session_key_for_channel` 完整方法。
 
 ```python
+# 根据统一会话开关或渠道与聊天地址生成会话键。
 def session_key_for_channel(channel: str, chat_id: str, *, unified_session: bool = False) -> str:
     """Return the session key for a channel/chat pair."""
-    # 统一会话模式使用公共会话键。
     if unified_session:
         return UNIFIED_SESSION_KEY
-    # 默认将渠道和聊天地址共同作为会话范围。
     return f"{channel}:{chat_id}"
 ```
 

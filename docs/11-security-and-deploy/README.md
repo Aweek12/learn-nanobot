@@ -1,6 +1,6 @@
 # 11 - 安全与部署
 
-> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。核心源码使用中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
+> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。方法使用本地新版完整源码并配中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
 
 部署命令与安全说明按本地实现核对；不再把正则黑名单、cwd或Prompt误称完备沙箱。未实际部署的内容仍为操作说明。
 
@@ -26,17 +26,21 @@
 
 ## 11.2 真实路径处理
 
-源码：[nanobot/security/workspace_policy.py:43](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/security/workspace_policy.py#L43)，`is_path_within`。
+<a id="method-is-path-within"></a>
+
+源码：[nanobot/security/workspace_policy.py:43](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/security/workspace_policy.py#L43)，`is_path_within` 完整方法。
 
 ```python
+# 解析真实路径层级关系，判断目标是否位于允许根目录内。
 def is_path_within(path: str | Path, root: str | Path) -> bool:
     """Return True when *path* resolves to *root* or a descendant of *root*."""
     try:
         resolved_path = Path(path).expanduser().resolve(strict=False)
         resolved_root = Path(root).expanduser().resolve(strict=False)
-        # 按真实路径层级判断包含关系，不使用字符串前缀。
+        # 按解析后的目录层级判断包含关系，不使用字符串前缀。
         resolved_path.relative_to(resolved_root)
         return True
+    # 处理 (OSError, RuntimeError, TypeError, ValueError)，按本方法约定记录、转换或继续传播错误。
     except (OSError, RuntimeError, TypeError, ValueError):
         return False
 ```

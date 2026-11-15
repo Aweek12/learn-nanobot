@@ -1,6 +1,6 @@
 # 05 - MCP协议与当前集成
 
-> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。核心源码使用中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
+> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。方法使用本地新版完整源码并配中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
 
 保留原协议概念与JSON报文教学示意；报文不是当前运行时源码或完整SDK实现，字段/错误码须按具体协商协议理解。项目集成、配置、包装器和练习按当前代码替换，不沿用旧版本年表。
 
@@ -557,35 +557,119 @@ MCPProvider 由应用组装处拥有，创建/连接后与 AgentLoop 共享 Tool
 
 MCPToolWrapper、MCPResourceWrapper、MCPPromptWrapper 将不同能力适配成本地Tool。协议解析和连接失败有专门路径，不应以手写几十行JSON循环冒充完整MCP握手。
 
-源码：[nanobot/agent/tools/mcp.py:1451](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L1451)
+<a id="method-mcpprovider-connect"></a>
+
+源码：[nanobot/agent/tools/mcp.py:1425](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L1425)，`MCPProvider.connect` 完整方法。
 
 ```python
-# 只选择已配置、当前缺失且不在等待授权的服务。
-missing_servers = {
-    name: cfg
-    for name, cfg in configured_missing.items()
-    if name not in authorization_pending
-}
-# 没有需要连接的服务时提前返回。
-if not missing_servers:
-    return
-# 先发布 connecting 状态，实际连接在后续代码执行。
-self._set_runtime_status(missing_servers, "connecting")
+# 筛选尚未连接且授权条件满足的服务，管理连接状态和关闭期间的资源回收。
+async def connect(self) -> None:
+    """Connect configured servers that are not currently live."""
+    async with self._lock:
+        if self._closing:
+            return
+        # 只选择已配置但当前尚未连接的服务。
+        configured_missing = {
+            name: cfg
+            for name, cfg in self._servers.items()
+            if name not in self._connections
+        }
+        oauth_servers = {
+            name: cfg
+            for name, cfg in configured_missing.items()
+            if cfg.auth == "oauth"
+        }
+        authorization_pending: set[str] = set()
+        if oauth_servers:
+            from nanobot.agent.tools.mcp_oauth import mcp_oauth_has_credentials
+
+            authorization_pending = {
+                name
+                for name, cfg in oauth_servers.items()
+                if not mcp_oauth_has_credentials(name, cfg.url)
+            }
+        for name in authorization_pending:
+            self._runtime_statuses.pop(name, None)
+        # 排除尚待授权的服务，避免无效连接尝试。
+        missing_servers = {
+            name: cfg
+            for name, cfg in configured_missing.items()
+            if name not in authorization_pending
+        }
+        if not missing_servers:
+            return
+        self._set_runtime_status(missing_servers, "connecting")
+        try:
+            # 建立服务连接并把发现的工具注册进统一工具表。
+            connected = await connect_mcp_servers(missing_servers, self._registry, network=self._network)
+            if self._closing:
+                await _close_mcp_connections(connected)
+                return
+            # 接管新连接，由 Provider 管理后续恢复和关闭。
+            self._connections.update(connected)
+            self._record_connection_result(missing_servers, connected)
+            self._attach_reconnect_handlers(connected)
+            if connected:
+                logger.info("MCP connected servers: {}", sorted(connected))
+            else:
+                logger.warning(
+                    "No MCP servers connected successfully "
+                    "(will retry on the next readiness check)"
+                )
+        # 单独处理取消信号，避免把真实取消误当成普通运行错误。
+        except asyncio.CancelledError:
+            self._set_runtime_status(missing_servers, "failed")
+            if task_is_cancelling():
+                raise
+            logger.warning(
+                "MCP connection cancelled (will retry on the next readiness check)"
+            )
+        # 处理 BaseException，按本方法约定记录、转换或继续传播错误。
+        except BaseException as exc:
+            self._set_runtime_status(missing_servers, "failed")
+            logger.warning(
+                "Failed to connect MCP servers "
+                "(will retry on the next readiness check): {}",
+                exc,
+            )
 ```
 
 **关键点解读：**
 
 连接属于应用资源的生命周期，工具调用属于一次执行。将它们分开，可以复用已建立的会话，并在退出时统一释放资源。调试时先确认发现了哪些工具，再检查某个工具的一次调用，避免把两类失败混在一起。
 
-源码：[nanobot/agent/tools/mcp.py:743](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L743)，`MCPToolWrapper.execute`。
+<a id="method-mcptoolwrapper-execute"></a>
+
+源码：[nanobot/agent/tools/mcp.py:743](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L743)，`MCPToolWrapper.execute` 完整方法。
 
 ```python
-# MCP 工具通过受管理的会话和恢复入口发送请求。
-result = await self._request_with_recovery(
-    lambda session: session.call_tool(self._original_name, arguments=kwargs),
-    self._tool_timeout,
-    "tool",
-)
+# 通过已管理的 MCP 会话调用远端工具，渲染结果并保留错误语义。
+async def execute(self, **kwargs: Any) -> str:
+    # 使用 MCP 管理的会话、超时与恢复路径调用远端工具。
+    result = await self._request_with_recovery(
+        lambda session: session.call_tool(self._original_name, arguments=kwargs),
+        self._tool_timeout,
+        "tool",
+    )
+    if isinstance(result, ToolResult):
+        return result
+    try:
+        rendered = self._render_call_result(result.content, kwargs)
+        # 保持远端错误语义，不把错误响应误当成正常文本。
+        if getattr(result, "isError", False):
+            return ToolResult.error(rendered)
+        return rendered
+    # 处理 Exception，按本方法约定记录、转换或继续传播错误。
+    except Exception as exc:
+        logger.opt(exception=tool_log_content_allowed()).error(
+            "MCP tool '{}' failed while rendering result: {}: {}",
+            self._name,
+            type(exc).__name__,
+            exc if tool_log_content_allowed() else "[content hidden]",
+        )
+        return ToolResult.error(
+            f"(MCP tool returned malformed content: {type(exc).__name__})"
+        )
 ```
 
 **关键点解读：**

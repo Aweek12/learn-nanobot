@@ -1,6 +1,6 @@
 # 07 - 会话、长期记忆与压缩
 
-> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。核心源码使用中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
+> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。方法使用本地新版完整源码并配中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
 
 原“两份Markdown文件管理全部记忆”的解释已替换为当前的 SQLite 会话、整理来源、摘要治理和 Dream 分工。
 
@@ -36,17 +36,32 @@ HISTORY.md 仅作为旧记忆格式迁移来源；旧会话JSONL也有导入路�
 
 ## 7.2 MemoryStore 接口
 
-源码：[nanobot/agent/memory.py:66](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L66)，`MemoryStore.__init__`。
+<a id="method-memorystore-init"></a>
+
+源码：[nanobot/agent/memory.py:66](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L66)，`MemoryStore.__init__` 完整方法。
 
 ```python
-# 记忆资料存放在 Agent 工作区下的 memory 目录。
-self.memory_dir = ensure_dir(workspace / "memory")
-# 长期整理知识的文件位置。
-self.memory_file = self.memory_dir / "MEMORY.md"
-# 逐条追加的历史来源，与会话数据库区别开。
-self.history_file = self.memory_dir / "history.jsonl"
-# 旧历史文件用于迁移，不是新历史的默认写入目标。
-self.legacy_history_file = self.memory_dir / "HISTORY.md"
+# 确定记忆与历史路径，初始化游标、写锁和版本存储，并迁移旧历史。
+def __init__(self, workspace: Path, max_history_entries: int = _DEFAULT_MAX_HISTORY):
+    self.workspace = workspace
+    self.max_history_entries = max_history_entries
+    self.memory_dir = ensure_dir(workspace / "memory")
+    self.memory_file = self.memory_dir / "MEMORY.md"
+    self.history_file = self.memory_dir / "history.jsonl"
+    self.legacy_history_file = self.memory_dir / "HISTORY.md"
+    self.soul_file = workspace / "SOUL.md"
+    self.user_file = workspace / "USER.md"
+    self._cursor_file = self.memory_dir / ".cursor"
+    self._dream_cursor_file = self.memory_dir / ".dream_cursor"
+    self._corruption_logged = False
+    self._malformed_entry_logged = False
+    self._oversize_logged = False
+    self._dream_prompt_oversize_logged = False
+    self._append_lock = threading.Lock()
+    self._git = GitStore(workspace, tracked_files=[
+        "SOUL.md", "USER.md", "memory/MEMORY.md", "memory/.dream_cursor",
+    ])
+    self._maybe_migrate_legacy_history()
 ```
 
 **关键点解读：**
@@ -55,23 +70,70 @@ self.legacy_history_file = self.memory_dir / "HISTORY.md"
 2. `legacy_history_file` 是旧历史文件的位置，构造阶段还有迁移处理，并不是继续把新历史写回旧文件。
 3. 本轮会话消息由 SessionState 与会话存储管理；这里的文件路径不能代替会话数据库的位置。
 
-源码：[nanobot/agent/memory.py:303](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L303)
+<a id="method-memorystore-append-history"></a>
+
+源码：[nanobot/agent/memory.py:269](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L269)，`MemoryStore.append_history` 完整方法。
 
 ```python
-# 分配游标与写入必须在同一把锁内完成。
-with self._append_lock:
-    # 分配单调递增位置，供后续整理跟踪进度。
-    cursor = self._next_cursor()
-    # 一条历史包含位置、时间和正文。
-    record = {"cursor": cursor, "timestamp": ts, "content": content}
-    if session_key:
-        record["session_key"] = session_key
-    # 使用追加模式，每条记录写成独立 JSON 行。
-    with open(self.history_file, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    # 保存当前游标，返回值表示本条历史位置。
-    self._cursor_file.write_text(str(cursor), encoding="utf-8")
-return cursor
+# 清理历史条目并应用长度预算，再交给受锁保护的历史写入方法。
+def append_history(
+    self,
+    entry: str,
+    *,
+    max_chars: int | None = None,
+    session_key: str | None = None,
+) -> int:
+    """Append *entry* to history.jsonl and return its auto-incrementing cursor.
+
+    Entries are passed through `strip_think` to drop template-level leaks
+    (e.g. unclosed `<think` prefixes, `<channel|>` markers) before being
+    persisted. If the cleaned content is empty but the raw entry wasn't,
+    the record is persisted with an empty string rather than falling back
+    to the raw leak — otherwise `strip_think`'s guarantees would be
+    undone when Dream consumes the journal entry.
+
+    A defensive cap (*max_chars*, default ``_HISTORY_ENTRY_HARD_CAP``) is
+    applied as a final safety net: individual callers should cap their own
+    content more tightly; this default only exists to catch unintentional
+    large writes (e.g. an LLM echoing its input back as a "summary").
+    """
+    # 先清理可能泄漏的模板内容并应用条目长度预算。
+    content = self._normalize_history_entry(entry, max_chars=max_chars)
+    if entry.rstrip() and not content:
+        logger.debug(
+            "history entry stripped to empty (likely template leak); "
+            "persisting empty content to avoid re-polluting Dream input",
+        )
+    # 把已清理内容交给原子追加入口，并返回历史游标。
+    return self._append_history_record(content, session_key=session_key)
+```
+
+`append_history()` 委托的历史追加方法如下：
+
+<a id="method-memorystore-append-history-record"></a>
+
+源码：[nanobot/agent/memory.py:298](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L298)，`MemoryStore._append_history_record` 完整方法。
+
+```python
+# 原子分配历史游标并追加一行 JSON，防止并发写入重复游标。
+def _append_history_record(self, content: str, *, session_key: str | None = None) -> int:
+    """Persist already sanitized, bounded content without rewriting chunk edges."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # Cursor allocation and the append must be atomic: concurrent writers
+    # could otherwise read the same current cursor and emit duplicates.
+    # 游标分配与追加写入在同一把锁内完成。
+    with self._append_lock:
+        # 分配新的递增位置，供后续历史整理跟踪进度。
+        cursor = self._next_cursor()
+        record = {"cursor": cursor, "timestamp": ts, "content": content}
+        if session_key:
+            record["session_key"] = session_key
+        # 追加写入 JSONL，每条历史占一行。
+        with open(self.history_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        # 保存当前游标，防止下次分配重复位置。
+        self._cursor_file.write_text(str(cursor), encoding="utf-8")
+    return cursor
 ```
 
 **关键点解读：**
@@ -98,27 +160,56 @@ SessionState 管运行时修改，SqliteSessionStore 管事务，模型消息与
 
 当前类为 Consolidator、MemoryArchiver，不是原教程的 MemoryConsolidator。请求治理区分模型已接收历史与新工具结果，必要时摘要或返回更小读取范围的预算错误。不是固定超过50条记录便写两份Markdown。
 
-源码：[nanobot/agent/memory.py:1092](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L1092)
+<a id="method-consolidator-summarize-transcript"></a>
+
+源码：[nanobot/agent/memory.py:1065](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L1065)，`Consolidator.summarize_transcript` 完整方法。
 
 ```python
-# 摘要生成委托给 archiver，并传入本轮模型运行条件。
-summary = await self.archiver.archive(
-    source_messages,
-    runtime=runtime,
-    session_key=session_key,
-    history=accepted_messages,
-    request_tools=tools,
-    previous_summary=previous_summary,
-    input_token_budget=input_token_budget,
-    fallback_max_tokens=max(1, checkpoint_tokens),
-    provider_state=provider_state,
-    persist=persist,
-)
-# 允许返回 None，调用方不能假定总有新摘要。
-if summary is None:
-    return None
-# 摘要输出仍受模型输出预算约束。
-return truncate_text_to_tokens(summary, max(1, max_output_tokens))
+# 选择可整理消息，计算摘要预算，并交给 archiver 生成受预算限制的摘要。
+async def summarize_transcript(
+    self,
+    accepted_messages: list[dict[str, Any]],
+    previous_summary: str | None,
+    *,
+    runtime: LLMRuntime,
+    session_key: str,
+    tools: list[dict[str, Any]],
+    provider_state: ProviderConversationState | None = None,
+    persist: bool = True,
+) -> str | None:
+    """Summarize the exact transcript prefix already accepted by the model."""
+    source_messages = [
+        dict(message)
+        for message in accepted_messages
+        if message.get("role") != "system"
+    ]
+    if not source_messages:
+        return None
+
+    max_output_tokens = max(0, runtime.generation.max_tokens)
+    input_token_budget = runtime.context_window_tokens - max_output_tokens
+    checkpoint_tokens = min(
+        max_output_tokens,
+        max(1, (input_token_budget - self._SAFETY_BUFFER) // 2),
+    )
+
+    # 把选定消息和预算交给摘要归档入口。
+    summary = await self.archiver.archive(
+        source_messages,
+        runtime=runtime,
+        session_key=session_key,
+        history=accepted_messages,
+        request_tools=tools,
+        previous_summary=previous_summary,
+        input_token_budget=input_token_budget,
+        fallback_max_tokens=max(1, checkpoint_tokens),
+        provider_state=provider_state,
+        persist=persist,
+    )
+    if summary is None:
+        return None
+    # 即使摘要生成成功，也要满足输出 token 预算。
+    return truncate_text_to_tokens(summary, max(1, max_output_tokens))
 ```
 
 **关键点解读：**

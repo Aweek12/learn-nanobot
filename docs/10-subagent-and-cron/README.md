@@ -1,6 +1,6 @@
 # 10 - 子 Agent、Cron 与心跳
 
-> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。核心源码使用中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
+> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。方法使用本地新版完整源码并配中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
 
 当前的子任务控制、调度与心跳实现有明确接口；原手写后台类与APScheduler代码不再冒充项目源码。
 
@@ -26,40 +26,85 @@
 
 ## 10.2 当前子任务API
 
-源码：[nanobot/agent/subagent.py:625](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py#L625)
+<a id="method-subagentmanager-spawn"></a>
+
+源码：[nanobot/agent/subagent.py:609](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py#L609)，`SubagentManager.spawn` 完整方法。
 
 ```python
-# 创建失败转为工具错误；创建成功不表示任务已完成。
-try:
-    # 将任务说明、来源、运行条件交给实际创建入口。
-    record = await self._create_task(
-        task, label, origin_channel, origin_chat_id, session_key,
-        origin_message_id, temperature, workspace_scope, runtime, announce=True, origin_turn_id=origin_turn_id,
-        session_policy=session_policy,
-    )
-except SubagentControlError as exc:
-    return ToolResult.error(f"Error: {exc}")
-# 读取刚创建任务的状态，用任务 ID 关联后续查询。
-status = record.status
-return f"Subagent [{status.label}] started (id: {status.task_id}). I'll notify you when it completes."
+# 创建有来源信息的子任务，返回任务状态和标识；创建回执不等于执行完成。
+async def spawn(
+    self,
+    task: str,
+    label: str | None = None,
+    origin_channel: str = "cli",
+    origin_chat_id: str = "direct",
+    session_key: str | None = None,
+    origin_message_id: str | None = None,
+    temperature: float | None = None,
+    workspace_scope: WorkspaceScope | None = None,
+    *,
+    runtime: LLMRuntime | None = None,
+    origin_turn_id: str | None = None,
+    session_policy: SessionPolicy | None = None,
+) -> str:
+    """Start background work and route its terminal result to the parent."""
+    try:
+        # 创建子任务记录并安排执行，保留来源与运行条件。
+        record = await self._create_task(
+            task, label, origin_channel, origin_chat_id, session_key,
+            origin_message_id, temperature, workspace_scope, runtime, announce=True, origin_turn_id=origin_turn_id,
+            session_policy=session_policy,
+        )
+    # 处理 SubagentControlError，按本方法约定记录、转换或继续传播错误。
+    except SubagentControlError as exc:
+        return ToolResult.error(f"Error: {exc}")
+    status = record.status
+    return f"Subagent [{status.label}] started (id: {status.task_id}). I'll notify you when it completes."
 ```
 
 **关键点解读：**
 
 `task` 描述工作，来源渠道、会话与轮次信息回答“结果交给谁”，运行条件决定模型及工作区范围。任务有自己的执行过程，创建回执不能直接当作完成结果。
 
-源码：[nanobot/agent/tools/subagent.py:91](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/subagent.py#L91)
+<a id="method-subagenttool-execute"></a>
+
+源码：[nanobot/agent/tools/subagent.py:86](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/subagent.py#L86)，`SubagentTool.execute` 完整方法。
 
 ```python
-# 先处理创建动作，其余动作使用已有任务标识。
-if action == "create":
-    # 拒绝空任务，防止创建没有实际目标的子任务。
-    if not task or not task.strip():
-        return ToolResult.error("Error: create requires a non-empty task")
-    # 创建和等待策略委托给专门入口。
-    return await self._create_task(task, label, temperature, wait)
-# 后续查询、发送和取消使用请求会话标识核对归属。
-owner = current_request_session_key()
+# 按动作创建、查询、发送输入或取消子任务，并核对任务归属。
+async def execute(
+    self, action: str, task_id: str | None = None, message: str | None = None,
+    task: str | None = None, label: str | None = None,
+    temperature: float | None = None, wait: bool = False, **kwargs: Any,
+) -> str:
+    # 创建动作需要非空任务说明；其他动作管理已有任务。
+    if action == "create":
+        if not task or not task.strip():
+            return ToolResult.error("Error: create requires a non-empty task")
+        return await self._create_task(task, label, temperature, wait)
+    # 取得调用会话身份，用于查询、发送和取消时核对任务归属。
+    owner = current_request_session_key()
+    try:
+        if action == "check":
+            if not owner:
+                raise SubagentControlError("task unavailable")
+            if task_id is not None:
+                return json.dumps(self._manager.check(task_id, owner).as_dict(), ensure_ascii=False)
+            return json.dumps({
+                "tasks": [status.as_dict()
+                          for status in self._manager.statuses_for_session(owner, include_history=False).values()],
+            }, ensure_ascii=False)
+        if action in {"send", "cancel"}:
+            if not task_id:
+                return ToolResult.error(f"Error: {action} requires task_id")
+            if action == "send":
+                return json.dumps(await self._manager.send(task_id, owner, message))
+            status = await self._manager.cancel(task_id, owner)
+            return json.dumps(status.as_dict(), ensure_ascii=False)
+        return ToolResult.error("Error: unknown subagent action")
+    # 处理 SubagentControlError，按本方法约定记录、转换或继续传播错误。
+    except SubagentControlError as exc:
+        return ToolResult.error(f"Error: {exc}")
 ```
 
 **关键点解读：**
@@ -84,22 +129,69 @@ create → 接纳与状态记录 → 调度/执行 → 结果/停止状态 → �
 
 ## 10.4 Cron并非APScheduler
 
-源码：[nanobot/cron/service.py:768](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/cron/service.py#L768)
+<a id="method-cronservice-add-job"></a>
+
+源码：[nanobot/cron/service.py:727](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/cron/service.py#L727)，`CronService.add_job` 完整方法。
 
 ```python
-# 规范化轮次任务并检查 Agent 绑定。
-_normalize_agent_turn_job(job)
-self._enforce_agent_binding(job)
-# 能直接持久化时写入任务存储并更新计时器。
-if self._should_persist_store():
-    store = self._require_store()
-    store.jobs.append(job)
-    # 登记任务后保存；这里只是调度登记，不是立即跑模型。
-    self._save_store()
-    self._arm_timer()
-# 另一条路径记录新增动作，由对应存储流程处理。
-else:
-    self._append_action("add", asdict(job))
+# 创建带日程和来源的任务记录，保存并安排后续计时。
+def add_job(
+    self,
+    name: str,
+    schedule: CronSchedule,
+    message: str,
+    deliver: bool = False,
+    channel: str | None = None,
+    to: str | None = None,
+    delete_after_run: bool = False,
+    channel_meta: dict[str, Any] | None = None,
+    session_key: str | None = None,
+    origin_channel: str | None = None,
+    origin_chat_id: str | None = None,
+    origin_metadata: dict[str, Any] | None = None,
+) -> CronJob:
+    """Add a new job."""
+    # 登记日程前先检查调度参数是否合法。
+    _validate_schedule_for_add(schedule)
+    now = _now_ms()
+
+    # 创建任务记录，包含日程、执行消息、来源和下次触发状态。
+    job = CronJob(
+        id=str(uuid.uuid4())[:8],
+        name=name,
+        enabled=True,
+        schedule=schedule,
+        payload=CronPayload(
+            kind="agent_turn",
+            message=message,
+            deliver=deliver,
+            channel=channel,
+            to=to,
+            channel_meta=channel_meta or {},
+            session_key=session_key,
+            origin_channel=origin_channel,
+            origin_chat_id=origin_chat_id,
+            origin_metadata=origin_metadata or {},
+        ),
+        state=CronJobState(next_run_at_ms=_compute_next_run(schedule, now)),
+        created_at_ms=now,
+        updated_at_ms=now,
+        delete_after_run=delete_after_run,
+    )
+    _normalize_agent_turn_job(job)
+    self._enforce_agent_binding(job)
+    if self._should_persist_store():
+        store = self._require_store()
+        store.jobs.append(job)
+        # 保存任务登记，不代表定时执行已经完成。
+        self._save_store()
+        # 根据最新日程重新安排触发计时。
+        self._arm_timer()
+    else:
+        self._append_action("add", asdict(job))
+
+    logger.info("Cron: added job '{}' ({})", name, job.id)
+    return job
 ```
 
 **关键点解读：**
@@ -113,30 +205,42 @@ else:
 
 ## 10.5 Cron工具参数
 
-源码：[nanobot/agent/tools/cron.py:144](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/cron.py#L144)
+<a id="method-crontool-execute"></a>
+
+源码：[nanobot/agent/tools/cron.py:131](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/cron.py#L131)，`CronTool.execute` 完整方法。
 
 ```python
-# 新增任务需要检查本轮是否已经来自 Cron。
-if action == "add":
-    request = current_request_context()
-    # 禁止在定时执行中继续创建任务，避免递归扩张。
-    if request is not None and is_cron_turn(request.metadata):
-        return ToolResult.error("Error: cannot schedule new jobs from within a cron job execution")
-    # 时间参数转换和登记委托给 _add_job。
-    return self._add_job(name, message or "", every_seconds, cron_expr, tz, at)
-# 其余动作分派到各自的管理方法。
-elif action == "list":
-    return self._list_jobs(include_disabled=include_disabled)
-elif action == "remove":
-    return self._remove_job(job_id)
-elif action == "update":
-    return self._update_job(job_id, name, message, every_seconds, cron_expr, tz, at)
-# 启用与禁用共享入口，状态取决于 action。
-elif action in {"enable", "disable"}:
-    return self._set_job_enabled(job_id, enabled=action == "enable")
-elif action == "history":
-    return self._job_history(job_id, limit)
-return f"Unknown action: {action}"
+# 按新增、列表、删除、更新、启停和历史动作分派到对应管理入口。
+async def execute(
+    self,
+    action: str,
+    name: str | None = None,
+    message: str | None = None,
+    every_seconds: int | None = None,
+    cron_expr: str | None = None,
+    tz: str | None = None,
+    at: str | None = None,
+    job_id: str | None = None,
+    include_disabled: bool = False,
+    limit: int = 5,
+) -> str:
+    # 新增 Cron 任务先核对当前输入来源，防止定时任务递归创建任务。
+    if action == "add":
+        request = current_request_context()
+        if request is not None and is_cron_turn(request.metadata):
+            return ToolResult.error("Error: cannot schedule new jobs from within a cron job execution")
+        return self._add_job(name, message or "", every_seconds, cron_expr, tz, at)
+    elif action == "list":
+        return self._list_jobs(include_disabled=include_disabled)
+    elif action == "remove":
+        return self._remove_job(job_id)
+    elif action == "update":
+        return self._update_job(job_id, name, message, every_seconds, cron_expr, tz, at)
+    elif action in {"enable", "disable"}:
+        return self._set_job_enabled(job_id, enabled=action == "enable")
+    elif action == "history":
+        return self._job_history(job_id, limit)
+    return f"Unknown action: {action}"
 ```
 
 **关键点解读：**
