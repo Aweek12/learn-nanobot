@@ -1,17 +1,20 @@
 {
-  "date": "2026-11-14",
+  "date": "2026-11-15",
   "commit": "27f1a836b5c04a30763dd91960059f81c05bf505",
-  "source_files": 84,
-  "source_excerpts": 23,
-  "python_blocks_syntax_checked": 37,
+  "source_files": 86,
+  "source_excerpts": 16,
+  "python_blocks_syntax_checked": 22,
   "json_blocks_parsed": 13,
   "config_examples_validated": 6,
-  "local_file_links": 45,
-  "local_anchors": 153,
-  "pinned_source_links": 234,
+  "local_file_links": 40,
+  "local_anchors": 155,
+  "pinned_source_links": 250,
   "interview_questions": 134,
+  "original_directory_overview_preserved": true,
+  "original_chapter04_topics_preserved": 46,
+  "max_core_python_block_lines": 10,
   "errors": [],
   "warnings": [],
   "live_model_calls": false,
-  "scope": "Documentation, source equivalence, structure and config validation; not runtime/end-to-end/business-example execution."
+  "scope": "Teaching documentation, exact core fragments, original chapter04 overview/topics, links, syntax and config structure; no runtime/business-example execution."
 }

@@ -80,7 +80,7 @@ metadata: {"nanobot":{"requires":{"bins":["python"]}}}
 
 metadata采用nanobot嵌套requires结构，不是nanobot.requires.bins字面键。具体安装/依赖、always和可用性以当前解析器为准。
 
-**真实源码节选**：[nanobot/agent/skill_metadata.py:32](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skill_metadata.py#L32)，`valid_skill_metadata`。仅移除公共缩进，未补齐文件其余依赖，不作为独立脚本执行。
+源码：[nanobot/agent/skill_metadata.py:32](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skill_metadata.py#L32)，`valid_skill_metadata`。
 
 ```python
 def valid_skill_metadata(metadata: dict[str, object], name: str) -> bool:
@@ -95,6 +95,8 @@ def valid_skill_metadata(metadata: dict[str, object], name: str) -> bool:
     )
 ```
 
+**关键点解读：**名称必须与目录身份一致，且名称和描述有长度、格式约束。这里校验的是 Skill 身份元数据，依赖是否安装与正文是否合理需要另外判断。条件用 and 连接，任一条件不满足都会拒绝该元数据。
+
 
 <a id="section-8-3"></a>
 
@@ -104,45 +106,24 @@ SkillsLoader发现工作区skills，再加入启用插件技能，最后补内�
 
 ContextBuilder加载always技能内容与其他技能摘要；显式$技能入口也有上下文逻辑。不是所有Skill每轮始终全文注入。
 
-**真实源码节选**：[nanobot/agent/skills.py:121](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skills.py#L121)，`SkillsLoader._discover_skills`。仅移除公共缩进，未补齐文件其余依赖，不作为独立脚本执行。
+源码：[nanobot/agent/skills.py:121](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skills.py#L121)，`SkillsLoader._discover_skills`。
 
-```python
-def _discover_skills(self) -> list[dict[str, str]]:
-    from nanobot.agent.plugins import enabled_agent_plugin_skill_documents
+流程伪代码：
 
-    plugin_skills = enabled_agent_plugin_skill_documents(self.workspace)
-    disabled = set(self.disabled_skills)
-    if disabled:
-        for legacy, canonical in self._skill_aliases().items():
-            if legacy in disabled or canonical in disabled:
-                disabled.update((legacy, canonical))
-    skills = self._skill_entries_from_dir(self.workspace_skills, "workspace")
-    seen_names = {entry["name"] for entry in skills}
-    snapshot = self._snapshot.get()
-    for skill in plugin_skills:
-        if skill.name in seen_names:
-            continue
-        skills.append(
-            {
-                "name": skill.name,
-                "path": str(skill.path),
-                "source": "plugin",
-            }
-        )
-        if snapshot is not None and skill.name not in disabled:
-            snapshot.documents[skill.name] = skill.content
-            snapshot.metadata[skill.name] = skill.metadata
-        seen_names.add(skill.name)
-    if self.builtin_skills and self.builtin_skills.exists():
-        skills.extend(
-            self._skill_entries_from_dir(self.builtin_skills, "builtin", skip_names=seen_names)
-        )
-
-    if disabled:
-        skills = [s for s in skills if s["name"] not in disabled]
-
-    return skills
+```text
+读取 workspace 技能，记录 seen_names
+加入未被同名覆盖的已启用插件技能
+加入仍未被同名覆盖的内置技能
+按 disabled 列表及别名关系过滤
+返回本次发现结果
 ```
+
+**关键点解读：**
+
+1. `seen_names` 解决同名来源的优先级，不是按文件修改时间选择“最新”。
+2. 工作区技能先进入结果，插件再补充，内置最后补充；所以工作区可以覆盖同名内置技能。
+3. 发现与实际可用性检查要区分：后续还会核对依赖与元数据。
+4. snapshot 让一次上下文组装使用一致的发现结果；always 技能加载全文，其余技能先展示摘要。
 
 
 <a id="section-8-4"></a>
@@ -179,7 +160,7 @@ def _discover_skills(self) -> list[dict[str, str]]:
 
 ## 8.5 ToolRegistry与参数
 
-**真实源码节选**：[nanobot/agent/tools/registry.py:40](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L40)，`ToolRegistry.register`。仅移除公共缩进，未补齐文件其余依赖，不作为独立脚本执行。
+源码：[nanobot/agent/tools/registry.py:40](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L40)，`ToolRegistry.register`。
 
 ```python
 def register(self, tool: Tool) -> None:
@@ -188,48 +169,27 @@ def register(self, tool: Tool) -> None:
     self._cached_definitions = None
 ```
 
-**真实源码节选**：[nanobot/agent/tools/registry.py:120](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L120)，`ToolRegistry.prepare_call`。仅移除公共缩进，未补齐文件其余依赖，不作为独立脚本执行。
+**关键点解读：**`tool.name` 是索引键，值是实例；注册后清空定义缓存，使下次导出工具定义时反映当前注册表。它没有直接执行工具，正好体现发现、注册与执行的区别。
 
-```python
-def prepare_call(
-    self,
-    name: str,
-    params: Any,
-) -> tuple[Tool | None, Any, str | None]:
-    """Resolve, cast, and validate one tool call."""
-    tool = self.get(name)
-    if not tool:
-        suggestion = self._suggest_name(str(name))
-        hint = f" Did you mean '{suggestion}'? Tool names must match exactly." if suggestion else ""
-        return None, params, (
-            ToolResult.error(
-                f"Error: Tool '{name}' not found.{hint} Available: {', '.join(self.tool_names)}"
-            )
-        )
-    # Compatibility for external tools that still implement the legacy
-    # setter protocol. Built-ins read the authoritative ContextVar
-    # directly and never copy routing state.
-    if isinstance(tool, ContextAware) and (ctx := current_request_context()) is not None:
-        tool.set_context(ctx)
+源码：[nanobot/agent/tools/registry.py:120](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L120)，`ToolRegistry.prepare_call`。
 
-    params = self._coerce_params(tool, params)
-    if not isinstance(params, dict):
-        return tool, params, (
-            ToolResult.error(
-                f"Error: Tool '{name}' parameters must be a JSON object, got "
-                f"{type(params).__name__}. Use named parameters like "
-                'tool_name(param1="value1", param2="value2") matching the tool schema.'
-            )
-        )
+流程伪代码：
 
-    cast_params = tool.cast_params(cast(dict[str, Any], params))
-    errors = tool.validate_params(cast_params)
-    if errors:
-        return tool, cast_params, (
-            ToolResult.error(f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors))
-        )
-    return tool, cast_params, None
+```text
+prepare_call(name, params):
+    按 name 查找工具；不存在则返回错误和可能的名称提示
+    准备工具请求上下文
+    规范化 params，并要求参数是对象
+    根据工具 Schema 转换类型、校验参数
+    返回 (tool, cast_params, error)
 ```
+
+**关键点解读：**
+
+1. 名称、参数格式、参数值依次检查；模型输出的工具调用需要经过这些检查才能执行。
+2. 返回三项是为了把“找到的实例”“转换后的参数”“失败原因”一起交给执行入口。
+3. 例如 `read_file` 的路径字段应符合该工具声明；提供一个工具名和任意字典不会绕过校验。
+4. 这个方法准备调用，不执行文件操作。真正副作用发生在后续 `tool.execute(**params)`。
 
 register接收Tool对象。Schema指导类型转换并校验，未知参数/名称不能默认当成任意Python调用。工具execute的实参不从旧教程的手写“parameters说明字典”推断。
 

@@ -36,43 +36,36 @@ HISTORY.md 仅作为旧记忆格式迁移来源；旧会话JSONL也有导入路�
 
 ## 7.2 MemoryStore 接口
 
-**真实源码节选**：[nanobot/agent/memory.py:66](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L66)，`MemoryStore.__init__`。仅移除公共缩进，未补齐文件其余依赖，不作为独立脚本执行。
+源码：[nanobot/agent/memory.py:66](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L66)，`MemoryStore.__init__`。
 
 ```python
-def __init__(self, workspace: Path, max_history_entries: int = _DEFAULT_MAX_HISTORY):
-    self.workspace = workspace
-    self.max_history_entries = max_history_entries
-    self.memory_dir = ensure_dir(workspace / "memory")
-    self.memory_file = self.memory_dir / "MEMORY.md"
-    self.history_file = self.memory_dir / "history.jsonl"
-    self.legacy_history_file = self.memory_dir / "HISTORY.md"
-    self.soul_file = workspace / "SOUL.md"
-    self.user_file = workspace / "USER.md"
-    self._cursor_file = self.memory_dir / ".cursor"
-    self._dream_cursor_file = self.memory_dir / ".dream_cursor"
-    self._corruption_logged = False
-    self._malformed_entry_logged = False
-    self._oversize_logged = False
-    self._dream_prompt_oversize_logged = False
-    self._append_lock = threading.Lock()
-    self._git = GitStore(workspace, tracked_files=[
-        "SOUL.md", "USER.md", "memory/MEMORY.md", "memory/.dream_cursor",
-    ])
-    self._maybe_migrate_legacy_history()
+self.memory_dir = ensure_dir(workspace / "memory")
+self.memory_file = self.memory_dir / "MEMORY.md"
+self.history_file = self.memory_dir / "history.jsonl"
+self.legacy_history_file = self.memory_dir / "HISTORY.md"
 ```
 
-**API 签名节选，省略实现**：[nanobot/agent/memory.py:269](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L269)。
+**关键点解读：**
 
-```python
-def append_history(
-    self,
-    entry: str,
-    *,
-    max_chars: int | None = None,
-    session_key: str | None = None,
-) -> int:
-    ...
+1. `MEMORY.md` 存放整理后的长期知识，`history.jsonl` 存放逐条历史记录，读取用途不同。
+2. `legacy_history_file` 是旧历史文件的位置，构造阶段还有迁移处理，并不是继续把新历史写回旧文件。
+3. 本轮会话消息由 SessionState 与会话存储管理；这里的文件路径不能代替会话数据库的位置。
+
+源码：[nanobot/agent/memory.py:269](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L269)。
+
+流程伪代码：
+
+```text
+append_history(entry, max_chars, session_key):
+    清理条目内容，并应用长度预算
+    在写入锁内分配新 cursor
+    将 cursor、timestamp、content 等写成一行 JSON
+    更新游标文件，返回 cursor
 ```
+
+**关键点解读：**
+
+游标和追加在同一把锁保护下，避免并发写入分配重复位置。`max_chars` 是历史条目的预算，既不是会话消息数量，也不是旧例子中的用户 200 字、回复 500 字规则。历史整理通过游标知道已经处理到哪里。
 
 append_history 接收字符串并同步返回cursor，不是 await 写 turn_summary 字典。write_memory、write_soul、write_user 有各自文件语义，不代替会话提交。
 
@@ -94,22 +87,20 @@ SessionState 管运行时修改，SqliteSessionStore 管事务，模型消息与
 
 当前类为 Consolidator、MemoryArchiver，不是原教程的 MemoryConsolidator。请求治理区分模型已接收历史与新工具结果，必要时摘要或返回更小读取范围的预算错误。不是固定超过50条记录便写两份Markdown。
 
-**API 签名节选，省略实现**：[nanobot/agent/memory.py:1065](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L1065)。
+源码：[nanobot/agent/memory.py:1065](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L1065)。
 
-```python
-async def summarize_transcript(
-    self,
-    accepted_messages: list[dict[str, Any]],
-    previous_summary: str | None,
-    *,
-    runtime: LLMRuntime,
-    session_key: str,
-    tools: list[dict[str, Any]],
-    provider_state: ProviderConversationState | None = None,
-    persist: bool = True,
-) -> str | None:
-    ...
+流程伪代码：
+
+```text
+已接受的 transcript + previous_summary
+    → Consolidator.summarize_transcript(...)
+    → 使用 runtime 提供的模型能力整理摘要
+    → 返回摘要文本或 None，并按 persist 条件处理持久化
 ```
+
+**关键点解读：**
+
+摘要是在既有总结基础上整理新内容。`runtime` 决定模型执行条件，`session_key` 标识来源，`persist` 控制相应保存行为。返回值允许为空，因此调用方不能假定每次请求都会得到新摘要。理解这一接口后，再读内部请求和预算处理。
 
 
 <a id="section-7-5"></a>

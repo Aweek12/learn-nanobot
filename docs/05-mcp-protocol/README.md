@@ -557,40 +557,36 @@ MCPProvider 由应用组装处拥有，创建/连接后与 AgentLoop 共享 Tool
 
 MCPToolWrapper、MCPResourceWrapper、MCPPromptWrapper 将不同能力适配成本地Tool。协议解析和连接失败有专门路径，不应以手写几十行JSON循环冒充完整MCP握手。
 
-**API 签名节选，省略实现**：[nanobot/agent/tools/mcp.py:1425](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L1425)。
+源码：[nanobot/agent/tools/mcp.py:1425](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L1425)。
 
-```python
-async def connect(self) -> None:
-    ...
+流程伪代码：
+
+```text
+应用组装 MCPProvider → connect() 建立连接并发现工具
+    → 工具注册后供 Runner 使用
+应用退出 → aclose() 关闭受管理的连接
 ```
 
-**真实源码节选**：[nanobot/agent/tools/mcp.py:743](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L743)，`MCPToolWrapper.execute`。仅移除公共缩进，未补齐文件其余依赖，不作为独立脚本执行。
+**关键点解读：**
+
+连接属于应用资源的生命周期，工具调用属于一次执行。将它们分开，可以复用已建立的会话，并在退出时统一释放资源。调试时先确认发现了哪些工具，再检查某个工具的一次调用，避免把两类失败混在一起。
+
+源码：[nanobot/agent/tools/mcp.py:743](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L743)，`MCPToolWrapper.execute`。
 
 ```python
-async def execute(self, **kwargs: Any) -> str:
-    result = await self._request_with_recovery(
-        lambda session: session.call_tool(self._original_name, arguments=kwargs),
-        self._tool_timeout,
-        "tool",
-    )
-    if isinstance(result, ToolResult):
-        return result
-    try:
-        rendered = self._render_call_result(result.content, kwargs)
-        if getattr(result, "isError", False):
-            return ToolResult.error(rendered)
-        return rendered
-    except Exception as exc:
-        logger.opt(exception=tool_log_content_allowed()).error(
-            "MCP tool '{}' failed while rendering result: {}: {}",
-            self._name,
-            type(exc).__name__,
-            exc if tool_log_content_allowed() else "[content hidden]",
-        )
-        return ToolResult.error(
-            f"(MCP tool returned malformed content: {type(exc).__name__})"
-        )
+result = await self._request_with_recovery(
+    lambda session: session.call_tool(self._original_name, arguments=kwargs),
+    self._tool_timeout,
+    "tool",
+)
 ```
+
+**关键点解读：**
+
+1. `_original_name` 是远端工具名；模型看到的本地注册名不一定与它完全相同。
+2. `kwargs` 是本次工具参数；`session.call_tool` 才把请求交给 MCP 会话。
+3. `_request_with_recovery` 负责受管理的请求与恢复路径，`_tool_timeout` 限制工具等待时间。
+4. 后续代码把 MCP 内容转换成本地工具结果，并保留 `isError` 的失败语义。远端返回内容不代表调用成功。
 
 
 <a id="section-5-8"></a>

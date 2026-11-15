@@ -26,7 +26,7 @@
 
 ## 11.2 真实路径处理
 
-**真实源码节选**：[nanobot/security/workspace_policy.py:43](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/security/workspace_policy.py#L43)，`is_path_within`。仅移除公共缩进，未补齐文件其余依赖，不作为独立脚本执行。
+源码：[nanobot/security/workspace_policy.py:43](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/security/workspace_policy.py#L43)，`is_path_within`。
 
 ```python
 def is_path_within(path: str | Path, root: str | Path) -> bool:

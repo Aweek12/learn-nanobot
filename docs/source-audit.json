@@ -85,166 +85,119 @@
     "nanobot/session/recovery.py": "cd85ac601bd2a370e8138017200286d536d78102120b6e2bf0eb1a0dec0b424a",
     "tests/agent/test_task_cancel.py": "aabc883eda100bee78bf988255556d7cfb1ae8906d9ab2dbcbfa5339df4c01f2",
     "nanobot/gateway/runtime.py": "2e706e724a1411cff3ff052df92c97ea0740d98250644ac06ec3694d4a16e518",
-    "nanobot/security/workspace_access.py": "298b5fa4731e676cdb572d51d836594bf80282341689a1d06c23c28a92d61177"
+    "nanobot/security/workspace_access.py": "298b5fa4731e676cdb572d51d836594bf80282341689a1d06c23c28a92d61177",
+    "nanobot/channels/telegram/runtime.py": "79f23f522774a4c914c2346643b00c624d13810c92f2f472a7d731498718760e",
+    "nanobot/channels/feishu/runtime.py": "a851b139a13116cfbf5fcd2f30de796f0a39acbe0285de569c8c5df592b8c160"
   },
   "excerpts": [
     {
       "path": "nanobot/agent/loop.py",
-      "symbol": "AgentLoop._run_turn",
-      "start": 2296,
-      "end": 2332,
-      "sha256": "5e4d7041bc9e25863d193a656c9eec33f895368b157b7b9411e3097754dc2a6c"
+      "symbol": "core fragment",
+      "start": 387,
+      "end": 387,
+      "sha256": "cd9cb6b36cb4da3f81d01b48199a5317e71218352aa3ed9d03505d0f1df81724"
     },
     {
       "path": "nanobot/agent/loop.py",
-      "symbol": "AgentLoop._save_turn",
-      "start": 2464,
-      "end": 2573,
-      "sha256": "d47be3787ce58723ab7b4cfd3b22b83c93eb7e28e4c4eae0269fe62548b058dc"
+      "symbol": "core fragment",
+      "start": 1418,
+      "end": 1419,
+      "sha256": "bcbc4fe461c188aca35acb2642d609c5bf8d338e18d043a814edba3c37af8985"
     },
     {
       "path": "nanobot/agent/runner.py",
-      "symbol": "AgentRunner.__init__",
-      "start": 155,
-      "end": 156,
-      "sha256": "5ead257c2c3de673248303de066da3af0f5462b7136bbd6a3bf1893ab44384cf"
-    },
-    {
-      "path": "nanobot/agent/runner.py",
-      "symbol": "AgentRunner.run",
-      "start": 284,
-      "end": 352,
-      "sha256": "34f1a43522aa26115ff7b78843b14e3315c7e99376a8c3eae9a6586e77e47092"
+      "symbol": "core fragment",
+      "start": 285,
+      "end": 288,
+      "sha256": "aa14b656fc19a1deddce93ce1096a2607ac9e9a3957fce356d0c5f4b29a0b7c9"
     },
     {
       "path": "nanobot/agent/context.py",
-      "symbol": "ContextBuilder.build_system_prompt",
-      "start": 87,
-      "end": 142,
-      "sha256": "febfd51a70236167b81fc3b52fc354c64592a950fab8f04a22a8e91b18ca999c"
+      "symbol": "core fragment",
+      "start": 96,
+      "end": 101,
+      "sha256": "5f175f1383ad10518980b23382e81791342b15b5420a508256373e3b16e7c429"
     },
     {
       "path": "nanobot/agent/memory.py",
-      "symbol": "MemoryStore.read_memory",
+      "symbol": "core fragment",
       "start": 221,
       "end": 222,
       "sha256": "918ace759b56787e4e8472f4a5343725cb1d02c9fd4b5dfc3c648f3d5b9bd0ac"
     },
     {
       "path": "nanobot/agent/memory.py",
-      "symbol": "MemoryStore.write_memory",
+      "symbol": "core fragment",
       "start": 224,
       "end": 225,
       "sha256": "898ddc3c2e896273930e31f1848f0ded7d0059658591d21066c4793249d820c3"
     },
     {
       "path": "nanobot/agent/tools/registry.py",
-      "symbol": "ToolRegistry.prepare_call",
-      "start": 120,
-      "end": 157,
-      "sha256": "b762500388c23157c9905c09f1da8b4f500b9c5f2123b4b30d87d6a150300bee"
+      "symbol": "core fragment",
+      "start": 199,
+      "end": 201,
+      "sha256": "0323d9a181e7b3efce0e5d8c6b1ad2f94fd0bbad77de3a57e10e85a6481bad7b"
+    },
+    {
+      "path": "nanobot/bus/queue.py",
+      "symbol": "core fragment",
+      "start": 44,
+      "end": 46,
+      "sha256": "e9a2104f204df42d84a41706f5db75ca52d8acb5062b1fdc806ade8bc9d118e8"
     },
     {
       "path": "nanobot/agent/tools/mcp.py",
-      "symbol": "MCPToolWrapper.execute",
-      "start": 743,
-      "end": 765,
-      "sha256": "c2268e78ec4dad892d3e59a555f25beb947a50ebb44a120276ad2fe1df07005d"
+      "symbol": "core fragment",
+      "start": 744,
+      "end": 748,
+      "sha256": "5678cd353b49562ebf5a00c37901fc63ae02acd4e0db45b54aaea03a6a053396"
     },
     {
       "path": "nanobot/agent/memory.py",
-      "symbol": "MemoryStore.__init__",
-      "start": 66,
-      "end": 85,
-      "sha256": "db83f1e9b8940fa6a8198d862b288a5d14cfb8c65ac3ec024236230cb5771399"
-    },
-    {
-      "path": "nanobot/agent/tools/mcp.py",
-      "symbol": "MCPToolWrapper.execute",
-      "start": 743,
-      "end": 765,
-      "sha256": "c2268e78ec4dad892d3e59a555f25beb947a50ebb44a120276ad2fe1df07005d"
+      "symbol": "core fragment",
+      "start": 69,
+      "end": 72,
+      "sha256": "6681ea2a3a3ebce65a088635f63fce94ff2be11ef157fedf91aa99e44dcfec0d"
     },
     {
       "path": "nanobot/agent/skill_metadata.py",
-      "symbol": "valid_skill_metadata",
+      "symbol": "core fragment",
       "start": 32,
       "end": 41,
       "sha256": "2a73e9d0fa8c6837f0803a527065bf044e747489151d85545d4973b6df19fbe6"
     },
     {
-      "path": "nanobot/agent/skills.py",
-      "symbol": "SkillsLoader._discover_skills",
-      "start": 121,
-      "end": 155,
-      "sha256": "72b46aea1e7ca5573c6584817f82a59c62e21835609b79813d9cfc58d32e4897"
-    },
-    {
       "path": "nanobot/agent/tools/registry.py",
-      "symbol": "ToolRegistry.register",
+      "symbol": "core fragment",
       "start": 40,
       "end": 43,
       "sha256": "14a40397a6ebba5e1f80d58baa5da3c953f00242db3d3e91342873dd47039b5a"
     },
     {
-      "path": "nanobot/agent/tools/registry.py",
-      "symbol": "ToolRegistry.prepare_call",
-      "start": 120,
-      "end": 157,
-      "sha256": "b762500388c23157c9905c09f1da8b4f500b9c5f2123b4b30d87d6a150300bee"
-    },
-    {
-      "path": "nanobot/bus/events.py",
-      "symbol": "InboundMessage",
-      "start": 26,
-      "end": 52,
-      "sha256": "568bbc05431f747896f923d053ec69e7080874e71c277a0013ab8a1608a8f833"
-    },
-    {
-      "path": "nanobot/bus/events.py",
-      "symbol": "OutboundMessage",
-      "start": 55,
-      "end": 73,
-      "sha256": "4728923f044f119334ea0ac173ef1a3c6aa85ac9c033eec021ca265d8e0a6610"
-    },
-    {
       "path": "nanobot/bus/queue.py",
-      "symbol": "MessageBus.publish_inbound",
+      "symbol": "core fragment",
       "start": 38,
       "end": 42,
       "sha256": "08aa108a0ba6f1daa2bc3c7d98777a45e8689e4cde9637de5b952bbeefbc6b66"
     },
     {
       "path": "nanobot/bus/queue.py",
-      "symbol": "MessageBus.publish_event",
-      "start": 54,
+      "symbol": "core fragment",
+      "start": 68,
       "end": 70,
-      "sha256": "ae1b2b4327f00b6e91091f7629d95a63da77bb648bb5d5c0e90e0c7a2d2f3daa"
-    },
-    {
-      "path": "nanobot/channels/base.py",
-      "symbol": "BaseChannel.start",
-      "start": 87,
-      "end": 97,
-      "sha256": "cfe1146f39988c1f0c7f7910aae0f37edb5e50ecba1cd249eebecbe8c5ca940b"
-    },
-    {
-      "path": "nanobot/channels/base.py",
-      "symbol": "BaseChannel.send",
-      "start": 104,
-      "end": 119,
-      "sha256": "3e849280825030a13befbf56a845aff99335acdc02b7894bbd044120cf98a855"
+      "sha256": "0e1aed987ad215c5ec35ff6debdb20df30d16ad777c78abe0ae3d1d0f8e4c397"
     },
     {
       "path": "nanobot/session/keys.py",
-      "symbol": "session_key_for_channel",
+      "symbol": "core fragment",
       "start": 21,
       "end": 25,
       "sha256": "cb6a1041288f88cfa4c5ef71c002a68fd09a75153952b2b886979f8ba6aeed48"
     },
     {
       "path": "nanobot/security/workspace_policy.py",
-      "symbol": "is_path_within",
+      "symbol": "core fragment",
       "start": 43,
       "end": 51,
       "sha256": "daf02dfcce06d75c8117128badacc4db2fb93edf926c3fe0f5094100a6ff8205"

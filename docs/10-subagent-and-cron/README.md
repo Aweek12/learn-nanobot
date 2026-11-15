@@ -26,37 +26,36 @@
 
 ## 10.2 当前子任务API
 
-**API 签名节选，省略实现**：[nanobot/agent/subagent.py:609](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py#L609)。
+源码：[nanobot/agent/subagent.py:609](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py#L609)。
 
-```python
-async def spawn(
-    self,
-    task: str,
-    label: str | None = None,
-    origin_channel: str = "cli",
-    origin_chat_id: str = "direct",
-    session_key: str | None = None,
-    origin_message_id: str | None = None,
-    temperature: float | None = None,
-    workspace_scope: WorkspaceScope | None = None,
-    *,
-    runtime: LLMRuntime | None = None,
-    origin_turn_id: str | None = None,
-    session_policy: SessionPolicy | None = None,
-) -> str:
-    ...
+流程伪代码：
+
+```text
+spawn(task, 来源信息, 运行条件):
+    建立有归属的子任务
+    交给并发受限的调度路径
+    执行后更新任务状态，并向来源回传结果
 ```
 
-**API 签名节选，省略实现**：[nanobot/agent/tools/subagent.py:86](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/subagent.py#L86)。
+**关键点解读：**
 
-```python
-async def execute(
-    self, action: str, task_id: str | None = None, message: str | None = None,
-    task: str | None = None, label: str | None = None,
-    temperature: float | None = None, wait: bool = False, **kwargs: Any,
-) -> str:
-    ...
+`task` 描述工作，来源渠道、会话与轮次信息回答“结果交给谁”，运行条件决定模型及工作区范围。任务有自己的执行过程，创建回执不能直接当作完成结果。
+
+源码：[nanobot/agent/tools/subagent.py:86](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/subagent.py#L86)。
+
+流程伪代码：
+
+```text
+execute(action, task_id, task/message, wait, ...):
+    create → 创建任务
+    send   → 发送后续输入
+    check  → 查询任务状态
+    cancel → 请求取消
 ```
+
+**关键点解读：**
+
+动作决定哪些参数有意义：创建需要任务说明，查询和取消需要任务标识，发送需要后续输入。`wait` 影响调用等待方式，但具体能否后台运行还受宿主能力等条件影响。先理解动作与状态转换，再查看完整签名中的可选参数。
 
 工具名subagent，action=create/send/cancel/check。wait、临时会话和宿主接收后台能力决定等待还是后台。send回执可表示已排队/已注入，不保证任务已采取行动。任务读取、取消与结果接纳检查归属。
 
@@ -76,26 +75,21 @@ create → 接纳与状态记录 → 调度/执行 → 结果/停止状态 → �
 
 ## 10.4 Cron并非APScheduler
 
-**API 签名节选，省略实现**：[nanobot/cron/service.py:727](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/cron/service.py#L727)。
+源码：[nanobot/cron/service.py:727](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/cron/service.py#L727)。
 
-```python
-def add_job(
-    self,
-    name: str,
-    schedule: CronSchedule,
-    message: str,
-    deliver: bool = False,
-    channel: str | None = None,
-    to: str | None = None,
-    delete_after_run: bool = False,
-    channel_meta: dict[str, Any] | None = None,
-    session_key: str | None = None,
-    origin_channel: str | None = None,
-    origin_chat_id: str | None = None,
-    origin_metadata: dict[str, Any] | None = None,
-) -> CronJob:
-    ...
+流程伪代码：
+
+```text
+add_job(name, schedule, message, 交付及来源信息):
+    创建 CronJob 和对应 payload
+    计算后续触发时间并更新任务存储
+    返回任务记录
+到期后由调度服务触发执行
 ```
+
+**关键点解读：**
+
+`schedule` 回答何时触发，`message` 回答触发后让 Agent 做什么，交付字段回答结果送往哪里。这三类信息不能互相代替。创建任务只是登记日程，不是马上执行模型调用。
 
 当前CronService自行管理CronJob、CronSchedule、CronPayload与运行记录，不使用原文展示的AsyncIOScheduler实现。Schedule.kind为at/every/cron，at_ms/every_ms/expr/tz是存储模型；工具面向模型的参数又是另一层。
 
@@ -104,24 +98,21 @@ def add_job(
 
 ## 10.5 Cron工具参数
 
-**API 签名节选，省略实现**：[nanobot/agent/tools/cron.py:131](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/cron.py#L131)。
+源码：[nanobot/agent/tools/cron.py:131](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/cron.py#L131)。
 
-```python
-async def execute(
-    self,
-    action: str,
-    name: str | None = None,
-    message: str | None = None,
-    every_seconds: int | None = None,
-    cron_expr: str | None = None,
-    tz: str | None = None,
-    at: str | None = None,
-    job_id: str | None = None,
-    include_disabled: bool = False,
-    limit: int = 5,
-) -> str:
-    ...
+流程伪代码：
+
+```text
+CronTool.execute(action, ...):
+    读取动作与时间参数
+    对新增动作，将 at/every_seconds/cron_expr 等转为 CronSchedule
+    委托 CronService 管理任务
+    返回操作结果
 ```
+
+**关键点解读：**
+
+模型-facing 参数便于表达“每隔多少秒”或“某个时区的 Cron 表达式”，服务内部则使用 `CronSchedule`。所以工具调用 JSON 与配置文件 JSON 不是同一种结构。下面的例子展示参数关系，重点比较 `cron_expr` 与 `tz` 如何一起定义触发时间。
 
 下面只是**工具参数示例**，不是config.json，也不会由本次修订实际创建任务：
 
