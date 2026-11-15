@@ -1,6 +1,6 @@
 # 10 - 子 Agent、Cron 与心跳
 
-> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。真实源码、API 签名、伪代码与配置示例分别标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
+> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。核心源码使用中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
 
 当前的子任务控制、调度与心跳实现有明确接口；原手写后台类与APScheduler代码不再冒充项目源码。
 
@@ -26,31 +26,40 @@
 
 ## 10.2 当前子任务API
 
-源码：[nanobot/agent/subagent.py:609](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py#L609)。
+源码：[nanobot/agent/subagent.py:625](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py#L625)
 
-流程伪代码：
-
-```text
-spawn(task, 来源信息, 运行条件):
-    建立有归属的子任务
-    交给并发受限的调度路径
-    执行后更新任务状态，并向来源回传结果
+```python
+# 创建失败转为工具错误；创建成功不表示任务已完成。
+try:
+    # 将任务说明、来源、运行条件交给实际创建入口。
+    record = await self._create_task(
+        task, label, origin_channel, origin_chat_id, session_key,
+        origin_message_id, temperature, workspace_scope, runtime, announce=True, origin_turn_id=origin_turn_id,
+        session_policy=session_policy,
+    )
+except SubagentControlError as exc:
+    return ToolResult.error(f"Error: {exc}")
+# 读取刚创建任务的状态，用任务 ID 关联后续查询。
+status = record.status
+return f"Subagent [{status.label}] started (id: {status.task_id}). I'll notify you when it completes."
 ```
 
 **关键点解读：**
 
 `task` 描述工作，来源渠道、会话与轮次信息回答“结果交给谁”，运行条件决定模型及工作区范围。任务有自己的执行过程，创建回执不能直接当作完成结果。
 
-源码：[nanobot/agent/tools/subagent.py:86](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/subagent.py#L86)。
+源码：[nanobot/agent/tools/subagent.py:91](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/subagent.py#L91)
 
-流程伪代码：
-
-```text
-execute(action, task_id, task/message, wait, ...):
-    create → 创建任务
-    send   → 发送后续输入
-    check  → 查询任务状态
-    cancel → 请求取消
+```python
+# 先处理创建动作，其余动作使用已有任务标识。
+if action == "create":
+    # 拒绝空任务，防止创建没有实际目标的子任务。
+    if not task or not task.strip():
+        return ToolResult.error("Error: create requires a non-empty task")
+    # 创建和等待策略委托给专门入口。
+    return await self._create_task(task, label, temperature, wait)
+# 后续查询、发送和取消使用请求会话标识核对归属。
+owner = current_request_session_key()
 ```
 
 **关键点解读：**
@@ -75,16 +84,22 @@ create → 接纳与状态记录 → 调度/执行 → 结果/停止状态 → �
 
 ## 10.4 Cron并非APScheduler
 
-源码：[nanobot/cron/service.py:727](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/cron/service.py#L727)。
+源码：[nanobot/cron/service.py:768](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/cron/service.py#L768)
 
-流程伪代码：
-
-```text
-add_job(name, schedule, message, 交付及来源信息):
-    创建 CronJob 和对应 payload
-    计算后续触发时间并更新任务存储
-    返回任务记录
-到期后由调度服务触发执行
+```python
+# 规范化轮次任务并检查 Agent 绑定。
+_normalize_agent_turn_job(job)
+self._enforce_agent_binding(job)
+# 能直接持久化时写入任务存储并更新计时器。
+if self._should_persist_store():
+    store = self._require_store()
+    store.jobs.append(job)
+    # 登记任务后保存；这里只是调度登记，不是立即跑模型。
+    self._save_store()
+    self._arm_timer()
+# 另一条路径记录新增动作，由对应存储流程处理。
+else:
+    self._append_action("add", asdict(job))
 ```
 
 **关键点解读：**
@@ -98,16 +113,30 @@ add_job(name, schedule, message, 交付及来源信息):
 
 ## 10.5 Cron工具参数
 
-源码：[nanobot/agent/tools/cron.py:131](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/cron.py#L131)。
+源码：[nanobot/agent/tools/cron.py:144](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/cron.py#L144)
 
-流程伪代码：
-
-```text
-CronTool.execute(action, ...):
-    读取动作与时间参数
-    对新增动作，将 at/every_seconds/cron_expr 等转为 CronSchedule
-    委托 CronService 管理任务
-    返回操作结果
+```python
+# 新增任务需要检查本轮是否已经来自 Cron。
+if action == "add":
+    request = current_request_context()
+    # 禁止在定时执行中继续创建任务，避免递归扩张。
+    if request is not None and is_cron_turn(request.metadata):
+        return ToolResult.error("Error: cannot schedule new jobs from within a cron job execution")
+    # 时间参数转换和登记委托给 _add_job。
+    return self._add_job(name, message or "", every_seconds, cron_expr, tz, at)
+# 其余动作分派到各自的管理方法。
+elif action == "list":
+    return self._list_jobs(include_disabled=include_disabled)
+elif action == "remove":
+    return self._remove_job(job_id)
+elif action == "update":
+    return self._update_job(job_id, name, message, every_seconds, cron_expr, tz, at)
+# 启用与禁用共享入口，状态取决于 action。
+elif action in {"enable", "disable"}:
+    return self._set_job_enabled(job_id, enabled=action == "enable")
+elif action == "history":
+    return self._job_history(job_id, limit)
+return f"Unknown action: {action}"
 ```
 
 **关键点解读：**

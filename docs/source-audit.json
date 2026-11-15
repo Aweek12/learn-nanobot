@@ -91,116 +91,332 @@
   },
   "excerpts": [
     {
+      "path": "nanobot/agent/runner.py",
+      "symbol": "core fragment",
+      "start": 494,
+      "end": 507,
+      "sha256": "1a934c8402eb334e3ad2e6a2ba330ec19fd16b2d8bfe28f47af940a943f6fbcb",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
       "path": "nanobot/agent/loop.py",
       "symbol": "core fragment",
       "start": 387,
       "end": 387,
-      "sha256": "cd9cb6b36cb4da3f81d01b48199a5317e71218352aa3ed9d03505d0f1df81724"
+      "sha256": "cd9cb6b36cb4da3f81d01b48199a5317e71218352aa3ed9d03505d0f1df81724",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/agent/loop.py",
       "symbol": "core fragment",
       "start": 1418,
       "end": 1419,
-      "sha256": "bcbc4fe461c188aca35acb2642d609c5bf8d338e18d043a814edba3c37af8985"
+      "sha256": "bcbc4fe461c188aca35acb2642d609c5bf8d338e18d043a814edba3c37af8985",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/loop.py",
+      "symbol": "core fragment",
+      "start": 1440,
+      "end": 1440,
+      "sha256": "f668a395bc0c1358c4bd870777568933031d8bd5638a7c985ec29785094bb19f",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/tools/loader.py",
+      "symbol": "core fragment",
+      "start": 99,
+      "end": 103,
+      "sha256": "2dc61808b8e6cc815d560ce334536a4c19ad0283e411ff1718757322cb48dc6c",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/loop.py",
+      "symbol": "core fragment",
+      "start": 2512,
+      "end": 2516,
+      "sha256": "612b3bcddec55a2901c61840b4fbf358b12c257c0b7b51854c5fa49c4e126d5f",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/agent/runner.py",
       "symbol": "core fragment",
       "start": 285,
       "end": 288,
-      "sha256": "aa14b656fc19a1deddce93ce1096a2607ac9e9a3957fce356d0c5f4b29a0b7c9"
+      "sha256": "aa14b656fc19a1deddce93ce1096a2607ac9e9a3957fce356d0c5f4b29a0b7c9",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/runner.py",
+      "symbol": "core fragment",
+      "start": 296,
+      "end": 299,
+      "sha256": "c29738c9ddf8a0e996cf86f71e75d0dccee1e2c09cf0d8b1944be1b86aa401bc",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/tools/registry.py",
+      "symbol": "core fragment",
+      "start": 199,
+      "end": 202,
+      "sha256": "41966ea13a8ca3b6f2b5298221dc34389ac6311a86bc8526fcc6c80423a2e70f",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/agent/context.py",
       "symbol": "core fragment",
       "start": 96,
       "end": 101,
-      "sha256": "5f175f1383ad10518980b23382e81791342b15b5420a508256373e3b16e7c429"
+      "sha256": "5f175f1383ad10518980b23382e81791342b15b5420a508256373e3b16e7c429",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/context.py",
+      "symbol": "core fragment",
+      "start": 113,
+      "end": 119,
+      "sha256": "341256cdedb4a0080a11da01ee1c14c7e0c09be166650de243b0440dffdf67e1",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/context.py",
+      "symbol": "core fragment",
+      "start": 237,
+      "end": 249,
+      "sha256": "3f156f25bdf26489a92b19d8783090ba2e4c21695f8d9bf7033fc674cac8774d",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/agent/memory.py",
       "symbol": "core fragment",
       "start": 221,
       "end": 222,
-      "sha256": "918ace759b56787e4e8472f4a5343725cb1d02c9fd4b5dfc3c648f3d5b9bd0ac"
+      "sha256": "918ace759b56787e4e8472f4a5343725cb1d02c9fd4b5dfc3c648f3d5b9bd0ac",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/agent/memory.py",
       "symbol": "core fragment",
       "start": 224,
       "end": 225,
-      "sha256": "898ddc3c2e896273930e31f1848f0ded7d0059658591d21066c4793249d820c3"
+      "sha256": "898ddc3c2e896273930e31f1848f0ded7d0059658591d21066c4793249d820c3",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
-      "path": "nanobot/agent/tools/registry.py",
+      "path": "nanobot/agent/memory.py",
       "symbol": "core fragment",
-      "start": 199,
-      "end": 201,
-      "sha256": "0323d9a181e7b3efce0e5d8c6b1ad2f94fd0bbad77de3a57e10e85a6481bad7b"
+      "start": 303,
+      "end": 311,
+      "sha256": "07e3c2c4ea269df2b996fff3b5c5a7113736fdc4c2fbe434458d6d4ac277d4f1",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/subagent.py",
+      "symbol": "core fragment",
+      "start": 625,
+      "end": 634,
+      "sha256": "746f94984668c00e2ef60ebb5cd468f3c1ba993e4e616c26050d895b20a87a34",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/tools/mcp.py",
+      "symbol": "core fragment",
+      "start": 744,
+      "end": 750,
+      "sha256": "49c26109bf5d330cfdd25dcb3ae61f260b2e960470788eee1706e9d77592bc84",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/tools/subagent.py",
+      "symbol": "core fragment",
+      "start": 91,
+      "end": 95,
+      "sha256": "91fd22a6d6a8048585b894f512b74831ac94e05864788b91e3ad7aaf75ddc689",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/bus/queue.py",
       "symbol": "core fragment",
       "start": 44,
       "end": 46,
-      "sha256": "e9a2104f204df42d84a41706f5db75ca52d8acb5062b1fdc806ade8bc9d118e8"
+      "sha256": "e9a2104f204df42d84a41706f5db75ca52d8acb5062b1fdc806ade8bc9d118e8",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/channels/telegram/runtime.py",
+      "symbol": "core fragment",
+      "start": 1943,
+      "end": 1949,
+      "sha256": "9b7bfd0ddabd561e2c7294159cfa5fc55cad618f1e357e5bb364397d4a5b2bd8",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/config/loader.py",
+      "symbol": "core fragment",
+      "start": 111,
+      "end": 121,
+      "sha256": "120f0be3a42ecca8ce73d3a3090722e67d498de51f7e0db21a1bd9b0dd7c857f",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/loop.py",
+      "symbol": "core fragment",
+      "start": 1940,
+      "end": 1951,
+      "sha256": "5d36c183fb12f6e08ad504169283c0ab282cdecbd447c9a615d9ee12a1d4f065",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/tools/mcp.py",
+      "symbol": "core fragment",
+      "start": 1451,
+      "end": 1458,
+      "sha256": "5284a64b6606144aa48ce3f7709ccda27d8e01ba2ce56027b2c2ea2e40c16620",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/providers/factory.py",
+      "symbol": "core fragment",
+      "start": 61,
+      "end": 71,
+      "sha256": "58161aab25f0a0c8bfe4b6a7090f4b5beb06012bec5276e562d559a3abe4cb0b",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/agent/tools/mcp.py",
       "symbol": "core fragment",
       "start": 744,
       "end": 748,
-      "sha256": "5678cd353b49562ebf5a00c37901fc63ae02acd4e0db45b54aaea03a6a053396"
+      "sha256": "5678cd353b49562ebf5a00c37901fc63ae02acd4e0db45b54aaea03a6a053396",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/agent/memory.py",
       "symbol": "core fragment",
       "start": 69,
       "end": 72,
-      "sha256": "6681ea2a3a3ebce65a088635f63fce94ff2be11ef157fedf91aa99e44dcfec0d"
+      "sha256": "6681ea2a3a3ebce65a088635f63fce94ff2be11ef157fedf91aa99e44dcfec0d",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/memory.py",
+      "symbol": "core fragment",
+      "start": 1092,
+      "end": 1106,
+      "sha256": "c009f7ad5d9f06d56d0307734e99a6993b8b746afb8dd726a0ee2f1acb5379d8",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/agent/skill_metadata.py",
       "symbol": "core fragment",
       "start": 32,
       "end": 41,
-      "sha256": "2a73e9d0fa8c6837f0803a527065bf044e747489151d85545d4973b6df19fbe6"
+      "sha256": "2a73e9d0fa8c6837f0803a527065bf044e747489151d85545d4973b6df19fbe6",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/skills.py",
+      "symbol": "core fragment",
+      "start": 147,
+      "end": 155,
+      "sha256": "bd6669aa2923cb8e0a994d9ad0733913e09119b2167350d4dcb6848fe26c5da4",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/agent/tools/registry.py",
       "symbol": "core fragment",
       "start": 40,
       "end": 43,
-      "sha256": "14a40397a6ebba5e1f80d58baa5da3c953f00242db3d3e91342873dd47039b5a"
+      "sha256": "14a40397a6ebba5e1f80d58baa5da3c953f00242db3d3e91342873dd47039b5a",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/tools/registry.py",
+      "symbol": "core fragment",
+      "start": 151,
+      "end": 157,
+      "sha256": "0659d970750dc45e869ebf8c8ad62dc6ec2c6698e0e2d61fd09f3fd1c3b84d79",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/bus/events.py",
+      "symbol": "core fragment",
+      "start": 30,
+      "end": 39,
+      "sha256": "f13ffed792852e38063d47e5af417d1a03dfaf30f0cb15b09719a32914ad48b4",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/bus/events.py",
+      "symbol": "core fragment",
+      "start": 64,
+      "end": 75,
+      "sha256": "b6ce72c3eb1d3bb2adbceec4cf9d9580169c82d8051a06f4b3ea49f487e3c816",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/bus/queue.py",
       "symbol": "core fragment",
       "start": 38,
       "end": 42,
-      "sha256": "08aa108a0ba6f1daa2bc3c7d98777a45e8689e4cde9637de5b952bbeefbc6b66"
+      "sha256": "08aa108a0ba6f1daa2bc3c7d98777a45e8689e4cde9637de5b952bbeefbc6b66",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/bus/queue.py",
       "symbol": "core fragment",
       "start": 68,
       "end": 70,
-      "sha256": "0e1aed987ad215c5ec35ff6debdb20df30d16ad777c78abe0ae3d1d0f8e4c397"
+      "sha256": "0e1aed987ad215c5ec35ff6debdb20df30d16ad777c78abe0ae3d1d0f8e4c397",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/channels/base.py",
+      "symbol": "core fragment",
+      "start": 87,
+      "end": 97,
+      "sha256": "cfe1146f39988c1f0c7f7910aae0f37edb5e50ecba1cd249eebecbe8c5ca940b",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/channels/base.py",
+      "symbol": "core fragment",
+      "start": 104,
+      "end": 119,
+      "sha256": "3e849280825030a13befbf56a845aff99335acdc02b7894bbd044120cf98a855",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/session/keys.py",
       "symbol": "core fragment",
       "start": 21,
       "end": 25,
-      "sha256": "cb6a1041288f88cfa4c5ef71c002a68fd09a75153952b2b886979f8ba6aeed48"
+      "sha256": "cb6a1041288f88cfa4c5ef71c002a68fd09a75153952b2b886979f8ba6aeed48",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/cron/service.py",
+      "symbol": "core fragment",
+      "start": 768,
+      "end": 776,
+      "sha256": "4492861974f0e955a82b34f5063ac29d79afec8fe072f5a02510b6fabdd28a7f",
+      "annotation": "Chinese # comments added; AST matches source"
+    },
+    {
+      "path": "nanobot/agent/tools/cron.py",
+      "symbol": "core fragment",
+      "start": 144,
+      "end": 159,
+      "sha256": "49564878e2ceddde28a0d75bf42ae43ceb5031cc3a554ca216047c4e4204af67",
+      "annotation": "Chinese # comments added; AST matches source"
     },
     {
       "path": "nanobot/security/workspace_policy.py",
       "symbol": "core fragment",
       "start": 43,
       "end": 51,
-      "sha256": "daf02dfcce06d75c8117128badacc4db2fb93edf926c3fe0f5094100a6ff8205"
+      "sha256": "daf02dfcce06d75c8117128badacc4db2fb93edf926c3fe0f5094100a6ff8205",
+      "annotation": "Chinese # comments added; AST matches source"
     }
   ],
   "configs": [

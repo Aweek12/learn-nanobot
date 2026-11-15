@@ -1,6 +1,6 @@
 # 07 - 会话、长期记忆与压缩
 
-> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。真实源码、API 签名、伪代码与配置示例分别标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
+> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。核心源码使用中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
 
 原“两份Markdown文件管理全部记忆”的解释已替换为当前的 SQLite 会话、整理来源、摘要治理和 Dream 分工。
 
@@ -39,9 +39,13 @@ HISTORY.md 仅作为旧记忆格式迁移来源；旧会话JSONL也有导入路�
 源码：[nanobot/agent/memory.py:66](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L66)，`MemoryStore.__init__`。
 
 ```python
+# 记忆资料存放在 Agent 工作区下的 memory 目录。
 self.memory_dir = ensure_dir(workspace / "memory")
+# 长期整理知识的文件位置。
 self.memory_file = self.memory_dir / "MEMORY.md"
+# 逐条追加的历史来源，与会话数据库区别开。
 self.history_file = self.memory_dir / "history.jsonl"
+# 旧历史文件用于迁移，不是新历史的默认写入目标。
 self.legacy_history_file = self.memory_dir / "HISTORY.md"
 ```
 
@@ -51,16 +55,23 @@ self.legacy_history_file = self.memory_dir / "HISTORY.md"
 2. `legacy_history_file` 是旧历史文件的位置，构造阶段还有迁移处理，并不是继续把新历史写回旧文件。
 3. 本轮会话消息由 SessionState 与会话存储管理；这里的文件路径不能代替会话数据库的位置。
 
-源码：[nanobot/agent/memory.py:269](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L269)。
+源码：[nanobot/agent/memory.py:303](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L303)
 
-流程伪代码：
-
-```text
-append_history(entry, max_chars, session_key):
-    清理条目内容，并应用长度预算
-    在写入锁内分配新 cursor
-    将 cursor、timestamp、content 等写成一行 JSON
-    更新游标文件，返回 cursor
+```python
+# 分配游标与写入必须在同一把锁内完成。
+with self._append_lock:
+    # 分配单调递增位置，供后续整理跟踪进度。
+    cursor = self._next_cursor()
+    # 一条历史包含位置、时间和正文。
+    record = {"cursor": cursor, "timestamp": ts, "content": content}
+    if session_key:
+        record["session_key"] = session_key
+    # 使用追加模式，每条记录写成独立 JSON 行。
+    with open(self.history_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    # 保存当前游标，返回值表示本条历史位置。
+    self._cursor_file.write_text(str(cursor), encoding="utf-8")
+return cursor
 ```
 
 **关键点解读：**
@@ -87,15 +98,27 @@ SessionState 管运行时修改，SqliteSessionStore 管事务，模型消息与
 
 当前类为 Consolidator、MemoryArchiver，不是原教程的 MemoryConsolidator。请求治理区分模型已接收历史与新工具结果，必要时摘要或返回更小读取范围的预算错误。不是固定超过50条记录便写两份Markdown。
 
-源码：[nanobot/agent/memory.py:1065](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L1065)。
+源码：[nanobot/agent/memory.py:1092](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L1092)
 
-流程伪代码：
-
-```text
-已接受的 transcript + previous_summary
-    → Consolidator.summarize_transcript(...)
-    → 使用 runtime 提供的模型能力整理摘要
-    → 返回摘要文本或 None，并按 persist 条件处理持久化
+```python
+# 摘要生成委托给 archiver，并传入本轮模型运行条件。
+summary = await self.archiver.archive(
+    source_messages,
+    runtime=runtime,
+    session_key=session_key,
+    history=accepted_messages,
+    request_tools=tools,
+    previous_summary=previous_summary,
+    input_token_budget=input_token_budget,
+    fallback_max_tokens=max(1, checkpoint_tokens),
+    provider_state=provider_state,
+    persist=persist,
+)
+# 允许返回 None，调用方不能假定总有新摘要。
+if summary is None:
+    return None
+# 摘要输出仍受模型输出预算约束。
+return truncate_text_to_tokens(summary, max(1, max_output_tokens))
 ```
 
 **关键点解读：**

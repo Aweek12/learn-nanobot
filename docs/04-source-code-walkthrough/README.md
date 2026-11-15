@@ -1,6 +1,6 @@
 # 04 - 源码逐行解读
 
-本章保留原教程的目录总览与讲解主题，按本地 nanobot `0.4.1`（`27f1a836b5c04a30763dd91960059f81c05bf505`）核对实现。每节先说明问题，再展示核心代码或流程伪代码，最后解释关键点；完整实现从源码链接继续阅读。
+本章保留原教程的目录总览与讲解主题，按本地 nanobot `0.4.1`（`27f1a836b5c04a30763dd91960059f81c05bf505`）核对实现。每节先说明问题，再展示带中文 # 注释的核心源码，最后解释关键点；完整实现从源码链接继续阅读。
 
 ## 目录
 
@@ -115,6 +115,7 @@ AgentLoop 负责接收消息、组织会话和安排一轮对话。先问自己�
 原教程用“每收到一条消息创建一个 Runner”解释 Loop，新版已经不是这个关系。先抓住构造阶段这一行：
 
 ```python
+# 在 Loop 构造阶段创建并复用 Runner；每次 run 是一次独立执行。
 self.runner = AgentRunner()
 ```
 
@@ -146,22 +147,19 @@ self.runner = AgentRunner()
 源码：[nanobot/agent/loop.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L1408)，`AgentLoop.run`。
 
 ```python
+# 等待输入的超时窗口是 1 秒，不是模型回答的时限。
 async with asyncio.timeout(1.0):
+    # 等待消息时让出事件循环，收到后交给分发层。
     msg = await self.bus.consume_inbound()
 ```
 
-把超时、分发与关闭放回一起，可以这样读：
+消费到消息后，真实分发调用如下；超时与关闭逻辑见同方法的完整源码：
 
-流程伪代码：
+源码：[nanobot/agent/loop.py:1440](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L1440)
 
-```text
-run():
-    标记循环运行中
-    while 仍在运行:
-        在 1 秒超时范围内等待 consume_inbound()
-        若超时：按需安排过期会话检查，继续等待
-        在 admission 活动范围内分发消息 _dispatch_inbound(msg)
-    finally: aclose() 释放运行时资源
+```python
+# 交给输入分发器；优先命令和会话队列在下一层处理。
+await self._dispatch_inbound(msg)
 ```
 
 **关键点解读：**
@@ -178,15 +176,17 @@ run():
 
 保留原教程“默认工具如何注册”的问题，但新版应转到 `ToolLoader.load()`，不要再寻找旧示例中的同名方法。
 
-源码：[nanobot/agent/tools/loader.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/loader.py#L89)，`ToolLoader.load`。
+源码：[nanobot/agent/tools/loader.py:99](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/loader.py#L99)
 
-流程伪代码：
-
-```text
-发现内置工具类和插件工具类
-按 scope、启用配置和运行条件筛选
-创建工具实例，并处理调用方已经提供的工具
-注册到 ToolRegistry，供模型取得定义并按名称调用
+```python
+# 作用域不匹配时跳过，避免把其他用途的工具加载进来。
+if scope not in getattr(tool_cls, "_scopes", {"core"}):
+    continue
+# 工具类结合当前上下文判断是否启用。
+if not tool_cls.enabled(ctx):
+    continue
+# 通过工具类工厂注入依赖，创建真实实例。
+tool = tool_cls.create(ctx)
 ```
 
 **关键点解读：**发现解决“有哪些工具类”，创建解决“依赖怎么传进去”，注册解决“用什么名字找到实例”。拆开这三步，才能理解为什么新增工具通常无需在 Loop 中继续堆注册语句。具体可用工具还取决于配置，目录中存在文件不等于本轮一定启用。
@@ -195,19 +195,17 @@ run():
 
 原示例把用户前 200 字和回复前 500 字存到 `HISTORY.md`，这不再是当前方法的实现。新版这里处理的是本轮结构化会话增量，而且方法是同步 `def`。
 
-源码：[nanobot/agent/loop.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L2464)，`AgentLoop._save_turn`。
+源码：[nanobot/agent/loop.py:2512](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L2512)
 
-流程伪代码：
-
-```text
-_save_turn(session, messages, skip, ...):
-    校验摘要检查点位置
-    遍历 messages[skip:] 的新增消息
-        转为持久化消息格式
-        跳过空 assistant，校验 tool_call_id 的配对和重复结果
-        清理不能直接持久化的媒体块，补充时间戳
-        追加到 session.messages，并处理摘要检查点
-    记录本轮延迟、后续输入等状态
+```python
+# 将原始轮次消息转换成适合持久化的条目。
+entry = persisted_message(message)
+# 取出内部后续输入标识，不把它当作普通消息字段存储。
+followup_id = entry.pop(PENDING_FOLLOWUP_ID_KEY, None)
+role, content = entry.get("role"), entry.get("content")
+# 空 assistant 且没有工具调用时跳过，避免污染未来上下文。
+if role == "assistant" and not content and not entry.get("tool_calls"):
+    continue  # skip empty assistant messages — they poison session context
 ```
 
 **关键点解读：**
@@ -236,9 +234,12 @@ _save_turn(session, messages, skip, ...):
 `AgentRunSpec` 携带本轮执行条件，`AgentRunResult` 汇总本轮结果。`run()` 中创建本轮消息和 Hook 上下文，这是理解对象复用的关键：
 
 ```python
+# 本轮优先使用指定 Hook，否则使用基础生命周期实现。
 hook = spec.hook or AgentHook()
 has_run_hooks = hook.has_run_hooks()
+# 这是本次调用的局部列表，不是所有会话共享的消息历史。
 messages: list[dict[str, Any]] = []
+# 单独保存本轮 Hook 状态，与 Runner 对象寿命区分。
 context = AgentRunHookContext(messages=[])
 ```
 
@@ -248,24 +249,17 @@ context = AgentRunHookContext(messages=[])
 
 新版把运行生命周期留在 `run()`，把迭代主体拆到 `_run_core()`。读原来的 run 主题时，需要顺着这个调用走一步。
 
-源码：[nanobot/agent/runner.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py#L384)，`AgentRunner._run_core`。
+源码：[nanobot/agent/runner.py:296](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py#L296)
 
-流程伪代码：
-
-```text
-run(spec):
-    准备初始 transcript 和压缩状态
-    before_run → _run_core → after_run
-    出错走 on_error，退出时走 on_finally
-
-_run_core(...):
-    在预算和继续条件允许时循环
-        合并待处理输入，准备本次模型上下文
-        before_iteration → 请求模型
-        若 should_execute_tools：写入 assistant 工具调用并执行工具
-            追加工具结果，继续下一次模型请求
-        否则处理最终输出；结合后续输入和继续策略决定结束
-    返回消息、最终文本、用量与停止原因
+```python
+# 准备本轮消息与上下文压缩状态。
+messages, compaction = await self.prepare_prompt(self._initial_transcript_and_compaction, spec)
+# 按 Hook 需要制作本轮消息快照。
+context.messages = await self._run_context_snapshot(hook, messages) if has_run_hooks else []
+# 进入单次运行前的生命周期扩展点。
+await hook.before_run(context)
+# 真正的模型与工具迭代主体位于 _run_core。
+result = await self._run_core(spec, hook, messages, compaction)
 ```
 
 **关键点解读：**
@@ -281,16 +275,14 @@ _run_core(...):
 
 原教程把工具执行及 `save_memory` 特判写在此处。新版没有照搬这套私有方法，应读 `tools/execution.py` 与 `ToolRegistry.execute()`。原问题保留，答案改为实际分层：Runner 组织调用，执行层处理调度，Registry 校验并调用工具。
 
-源码：[nanobot/agent/tools/registry.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L197)，`ToolRegistry.execute`。
+源码：[nanobot/agent/tools/registry.py:199](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L199)
 
-流程伪代码：
-
-```text
-模型返回 tool_calls
-    → 执行层结合工具并发属性安排调用
-    → Registry.prepare_call(name, params) 查找、转换、校验
-    → tool.execute(**params)
-    → 形成工具结果消息，交回 Runner
+```python
+# 先查找工具、转换并校验参数，再允许执行。
+tool, params, error = self.prepare_call(name, params)
+# 发现错误就返回工具错误结果，不进行实际副作用。
+if error:
+    return ToolResult.error(with_tool_error_hint(str(error)))
 ```
 
 **关键点解读：**模型产生的是调用意图，Python 才执行实际副作用；参数 Schema 告诉模型怎么调用，运行时校验则检查真实参数。长期记忆读写及整理要沿当前 MemoryStore、工具和记忆流程追踪，不能继续解释成 Runner 必定拦截一个虚拟 `save_memory`。
@@ -330,25 +322,33 @@ ContextBuilder 决定模型这一次看见什么。用户消息只是输入的�
 这个方法的主线是按条件收集 `parts`，最后连接。保留最容易理解的真实开头：
 
 ```python
+# 本轮指定项目优先，否则使用默认工作区。
 root = workspace or self.workspace
+# 先加入身份说明，再逐步装配其他提示词来源。
 parts = [self._get_identity(channel=channel, workspace=root)]
 
+# 读取项目启动说明，区别于聊天历史。
 bootstrap = self._load_bootstrap_files(root)
+# 只有存在启动说明时才加入提示词。
 if bootstrap:
     parts.append(bootstrap)
 ```
 
-后续内容按以下顺序继续组装：
+后续长期记忆的条件加载代码如下：
 
-流程伪代码：
+源码：[nanobot/agent/context.py:113](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py#L113)
 
-```text
-身份 → bootstrap 文件 → 工具契约
-    → 当前项目位置（与默认工作区不同时）
-    → 长期记忆（include_memory 且不是模板内容）
-    → always 技能全文、其余技能摘要
-    → 归档会话摘要（存在有效摘要时）
-最后用分隔符连接 parts
+```python
+# 本轮允许加载长期记忆时才读取。
+if include_memory:
+    memory = self.memory.read_memory()
+    # 仅将非空且不是默认模板的记忆加入提示词。
+    if memory and not self._is_template_content(memory, "memory/MEMORY.md"):
+        parts.append(memory)
+        # 记录本次上下文引用的来源，方便追踪。
+        record_source(self.memory.memory_file, memory)
+    elif self.memory.memory_file.is_file():
+        record_source(self.memory.memory_file, "", loaded=False)
 ```
 
 **关键点解读：**`workspace or self.workspace` 允许本轮指定项目；bootstrap 是启动说明来源，不能与消息历史混同。记忆和技能有加载条件，因此“磁盘上有文件”不等于“每次都全文注入”。always 技能加载正文，其余技能先提供摘要，体现按需获取知识。
@@ -357,15 +357,25 @@ if bootstrap:
 
 新版中它是兼容包装器，先构造 `TranscriptInput` 并调用 `build_transcript()`，然后按条件合并相邻同角色消息。核心运行路径阅读时还要进入 transcript 构建，而不是只盯这个旧入口名。
 
-源码：[nanobot/agent/context.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py#L223)，`ContextBuilder.build_messages`。
+源码：[nanobot/agent/context.py:237](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py#L237)
 
-流程伪代码：
-
-```text
-history、current_message、media、summary、runtime_context_blocks
-    → TranscriptInput
-    → build_transcript(...)
-    → build_messages 的兼容处理：必要时合并相邻同角色消息
+```python
+# 兼容入口把构建工作委托给 build_transcript。
+messages = self.build_transcript(
+    # 将历史、当前消息、媒体和摘要装成类型化输入。
+    TranscriptInput(
+        history=history,
+        current_message=current_message,
+        media=media,
+        current_role=current_role,
+        session_summary=session_summary,
+        runtime_context_blocks=runtime_context_blocks,
+    # 渠道、工作区与记忆开关控制本次装配条件。
+    ),
+    channel=channel,
+    workspace=workspace,
+    include_memory=include_memory,
+)
 ```
 
 **关键点解读：**历史消息保留角色与工具调用结构；当前用户消息追加在本轮输入位置；运行时上下文是另一类输入。调试回答遗漏信息时，先检查最终 transcript 里是否真的包含它，再判断是模型问题还是上下文装配问题。
@@ -401,6 +411,7 @@ history、current_message、media、summary、runtime_context_blocks
 ### read_memory() 方法
 
 ```python
+# 长期记忆读取接口；是否注入 Prompt 由上下文构建器决定。
 def read_memory(self) -> str:
     return self.read_file(self.memory_file)
 ```
@@ -412,6 +423,7 @@ def read_memory(self) -> str:
 原教程的“保存长期记忆”主题保留；新版实际方法名是 `write_memory()`：
 
 ```python
+# 这里只负责把给定内容写入长期记忆文件。
 def write_memory(self, content: str) -> None:
     self.memory_file.write_text(content, encoding="utf-8")
 ```
@@ -420,15 +432,23 @@ def write_memory(self, content: str) -> None:
 
 ### append_history() 方法
 
-源码：[nanobot/agent/memory.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L269)，`MemoryStore.append_history`。
+源码：[nanobot/agent/memory.py:303](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py#L303)
 
-流程伪代码：
-
-```text
-append_history(entry: str, ...):
-    在历史写入保护下处理条目及游标
-    以 JSONL 格式追加历史记录
-    返回对应游标
+```python
+# 分配游标与写入必须在同一把锁内完成。
+with self._append_lock:
+    # 分配单调递增位置，供后续整理跟踪进度。
+    cursor = self._next_cursor()
+    # 一条历史包含位置、时间和正文。
+    record = {"cursor": cursor, "timestamp": ts, "content": content}
+    if session_key:
+        record["session_key"] = session_key
+    # 使用追加模式，每条记录写成独立 JSON 行。
+    with open(self.history_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    # 保存当前游标，返回值表示本条历史位置。
+    self._cursor_file.write_text(str(cursor), encoding="utf-8")
+return cursor
 ```
 
 **关键点解读：**当前入口接收字符串条目并返回游标，且是同步方法，不是旧例子中 `await append_history(turn_summary)`。JSONL 便于逐条读取；游标用于定位整理进度，不能与截取用户前多少字符混为一谈。具体长度预算应查看该方法参数和调用方。
@@ -457,16 +477,22 @@ append_history(entry: str, ...):
 
 ### spawn() 方法
 
-源码：[nanobot/agent/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py#L609)，`SubagentManager.spawn`。
+源码：[nanobot/agent/subagent.py:625](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py#L625)
 
-流程伪代码：
-
-```text
-接收子任务说明和来源信息
-    → 校验并建立任务记录
-    → 进入受并发上限约束的调度路径
-    → 子任务 Runner 执行模型工具循环
-    → 更新完成、失败或取消状态，按来源回传结果
+```python
+# 创建失败转为工具错误；创建成功不表示任务已完成。
+try:
+    # 将任务说明、来源、运行条件交给实际创建入口。
+    record = await self._create_task(
+        task, label, origin_channel, origin_chat_id, session_key,
+        origin_message_id, temperature, workspace_scope, runtime, announce=True, origin_turn_id=origin_turn_id,
+        session_policy=session_policy,
+    )
+except SubagentControlError as exc:
+    return ToolResult.error(f"Error: {exc}")
+# 读取刚创建任务的状态，用任务 ID 关联后续查询。
+status = record.status
+return f"Subagent [{status.label}] started (id: {status.task_id}). I'll notify you when it completes."
 ```
 
 **关键点解读：**创建任务不代表立即完成；达到并发上限后需要排队；取消、查询与结果回传都需要明确的任务标识。当前配置默认并发子任务数为 4，迭代预算来自配置，不要沿用旧示例固定 15 轮的说法。
@@ -484,7 +510,9 @@ Registry 是“名称到工具实例”的索引，同时承担调用准备与�
 源码：[nanobot/agent/tools/registry.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L29)，`ToolRegistry`。
 
 ```python
+# 执行之前先完成工具查找、参数转换与校验。
 tool, params, error = self.prepare_call(name, params)
+# 参数错误时直接返回，不发生工具副作用。
 if error:
     return ToolResult.error(with_tool_error_hint(str(error)))
 ```
@@ -493,15 +521,19 @@ if error:
 
 ### 4.7.2 MCPToolWrapper - mcp.py
 
-源码：[nanobot/agent/tools/mcp.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L743)，`MCPToolWrapper.execute`。
+源码：[nanobot/agent/tools/mcp.py:744](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L744)
 
-流程伪代码：
-
-```text
-模型调用本地已注册的 MCP 包装工具
-    → Wrapper 通过 MCPProvider 的连接和恢复机制请求远端工具
-    → MCP session.call_tool(...)
-    → 把返回内容和 isError 转换为本地工具结果
+```python
+# 通过受管理的请求与恢复入口调用远端工具。
+result = await self._request_with_recovery(
+    # 原始远端工具名与本次参数传给 MCP 会话。
+    lambda session: session.call_tool(self._original_name, arguments=kwargs),
+    self._tool_timeout,
+    "tool",
+)
+# 内部已产生 ToolResult 时直接沿用。
+if isinstance(result, ToolResult):
+    return result
 ```
 
 **关键点解读：**包装器让 Runner 不必分别理解每个远端服务；连接生命周期由 Provider 管理，不能每次工具调用临时拼一个裸 HTTP 请求。远端执行返回错误也需要保持错误语义，不能把它当成功文本。
@@ -518,15 +550,18 @@ MessageTool 允许模型主动发送消息。读源码时跟踪三件事：目�
 
 这里保留原教程“用工具创建子任务”的位置。新版文件为 `tools/subagent.py`，类为 `SubagentTool`，工具名为 `subagent`。
 
-源码：[nanobot/agent/tools/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/subagent.py#L86)，`SubagentTool.execute`。
+源码：[nanobot/agent/tools/subagent.py:91](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/subagent.py#L91)
 
-流程伪代码：
-
-```text
-action=create → 创建子任务
-action=send   → 给已有子任务发送输入
-action=check  → 查询状态
-action=cancel → 请求取消
+```python
+# 先处理创建动作，其余动作使用已有任务标识。
+if action == "create":
+    # 拒绝空任务，防止创建没有实际目标的子任务。
+    if not task or not task.strip():
+        return ToolResult.error("Error: create requires a non-empty task")
+    # 创建和等待策略委托给专门入口。
+    return await self._create_task(task, label, temperature, wait)
+# 后续查询、发送和取消使用请求会话标识核对归属。
+owner = current_request_session_key()
 ```
 
 **关键点解读：**模型通过统一工具接口提出管理任务的请求，SubagentManager 才负责真实调度。新版已不只是一个 `spawn(task)` 动作，阅读时要分清工具层的动作分派与管理器层的任务执行。
@@ -542,8 +577,10 @@ action=cancel → 请求取消
 源码：[nanobot/bus/queue.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/queue.py#L44)，`MessageBus.consume_inbound`。
 
 ```python
+# 消费统一输入队列，无消息时异步等待。
 async def consume_inbound(self) -> InboundMessage:
     """Consume the next inbound message (blocks until available)."""
+    # 这里只取输入，不执行模型与工具循环。
     return await self.inbound.get()
 ```
 
@@ -563,16 +600,20 @@ BaseChannel 定义启动、停止和发送等共享契约。平台 SDK、消息�
 
 ### Telegram 适配器示例
 
-源码：[nanobot/channels/telegram/runtime.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/telegram/runtime.py#L1943)，`TelegramChannel._on_message`。
+源码：[nanobot/channels/telegram/runtime.py:1943](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/telegram/runtime.py#L1943)
 
-流程伪代码：
-
-```text
-Telegram update
-    → 提取文本、媒体、用户与话题信息
-    → 按平台规则得到会话地址和元数据
-    → 发布统一 InboundMessage
-后端返回出站事件 → Telegram 适配器调用平台 SDK 发送
+```python
+# 平台消息回调只负责接收和安排处理。
+async def _on_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # 没有消息或有效用户时忽略该事件。
+    if not update.message or not update.effective_user:
+        return
+    # 尚未进入运行状态时使用直接处理路径。
+    if not self._running:
+        await self._process_message_update(update)
+        return
+    # 正常运行时进入有序队列，避免更新处理乱序。
+    self._enqueue_ordered_update(kind="message", update=update)
 ```
 
 **关键点解读：**一个平台群聊可能有话题，不能仅凭用户 ID 认定会话；媒体下载与模型执行也不是同一职责。阅读这个例子时，重点找“平台消息变成统一消息”的边界。
@@ -597,15 +638,24 @@ Telegram update
 
 ### 配置加载
 
-源码：[nanobot/config/loader.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/config/loader.py#L36)，`load_config`。
+源码：[nanobot/config/loader.py:111](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/config/loader.py#L111)
 
-流程伪代码：
-
-```text
-定位配置文件
-    → 读取 JSON，处理兼容与规范化
-    → Config.model_validate(...) 得到类型化配置
-    → 启动层把配置传给对应运行时组件
+```python
+# 先迁移旧字段到当前配置结构。
+data = _migrate_config(cast(dict[str, Any], data))
+# JSON 语法通过后，还必须做类型和字段校验。
+try:
+    # 构造当前 Pydantic 配置模型。
+    config = Config.model_validate(data)
+except ValidationError as exc:
+    # 把校验问题转换成可定位的配置加载错误。
+    issues = validation_issues(exc)
+    raise ConfigLoadError(
+        path,
+        kind="invalid_schema",
+        summary=f"Found {len(issues)} invalid setting(s).",
+        issues=issues,
+    ) from exc
 ```
 
 **关键点解读：**JSON 能解析只证明语法有效，Pydantic 校验通过才说明满足配置结构；API Key 可用、模型服务可达仍需实际请求验证。`${VAR}` 是配置环境变量引用语法，不是把 PowerShell 的 `$env:VAR` 原样填进 JSON。
@@ -616,29 +666,46 @@ Telegram update
 
 ### 片段 1：完整的消息处理链路
 
-流程伪代码：
+源码：[nanobot/agent/loop.py:1940](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py#L1940)
 
-```text
-渠道输入 → MessageBus → AgentLoop.run / _dispatch_inbound
-    → 会话协调 → _process_message
-    → restore → compact → command → build → run → save → respond
-    → Runner 请求模型、执行工具并产生结果
-    → 会话提交和出站交付
+```python
+# 日志携带轮次与会话标识，便于关联一条输入。
+with logger.contextualize(turn_id=ctx.turn_id, session_key=ctx.session_key):
+    # 恢复会话，再按需要整理上下文。
+    await self._run_turn_stage(ctx, "restore", self._restore_turn)
+    await self._run_turn_stage(ctx, "compact", self._compact_session)
+    # 命令可能提前完成，因此并非每次都调用模型。
+    if await self._run_turn_stage(ctx, "command", self._dispatch_command):
+        self._log_turn_completion(ctx, outcome="command")
+        return ctx.outbound
+    # 构建上下文后进入模型工具运行阶段。
+    await self._run_turn_stage(ctx, "build", self._build_turn)
+    await self._run_turn_stage(ctx, "run", self._run_turn)
+    # 保存会话，再准备对外回复。
+    await self._run_turn_stage(ctx, "save", self._persist_turn)
+    await self._run_turn_stage(ctx, "respond", self._prepare_outbound)
+    self._log_turn_completion(ctx)
+    return ctx.outbound
 ```
 
 **关键点解读：**这是阶段关系图，不是所有请求都会走完的强制调用栈。例如命令可能提前结束。先用这条线定位某个功能归谁管，再进入具体方法；不要在多个章节重复粘贴整段单轮编排代码。
 
 ### 片段 2：MCP 工具注册流程
 
-源码：[nanobot/agent/tools/mcp.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L1425)，`MCPProvider.connect`。
+源码：[nanobot/agent/tools/mcp.py:1451](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L1451)
 
-流程伪代码：
-
-```text
-读取 MCP 服务配置 → Provider 连接并发现远端工具
-    → 为工具建立 Wrapper 并注册
-    → 模型看见工具定义
-    → 调用时通过 Wrapper 进入已管理的 MCP 会话
+```python
+# 只选择已配置、当前缺失且不在等待授权的服务。
+missing_servers = {
+    name: cfg
+    for name, cfg in configured_missing.items()
+    if name not in authorization_pending
+}
+# 没有需要连接的服务时提前返回。
+if not missing_servers:
+    return
+# 先发布 connecting 状态，实际连接在后续代码执行。
+self._set_runtime_status(missing_servers, "connecting")
 ```
 
 **关键点解读：**发现阶段让模型知道“可以做什么”，调用阶段才真的执行。服务名、远端工具名与本地注册名需要在调试时对应起来；不要把连接成功当作每个工具调用都已成功。
@@ -647,15 +714,24 @@ Telegram update
 
 源码：[nanobot/providers/routing.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/providers/routing.py#L1)。
 
-源码：[nanobot/providers/factory.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/providers/factory.py#L1)。
+源码：[nanobot/providers/factory.py:61](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/providers/factory.py#L61)
 
-流程伪代码：
-
-```text
-模型与配置 → 路由决定供应商/适配器
-    → 工厂构造 LLMProvider 实例
-    → Runner 通过统一接口请求模型
-    → 适配器把服务响应转换为统一结果
+```python
+# 由配置与模型预设解析出实际供应商路由。
+setup = resolve_provider_route(
+    config,
+    preset=preset,
+    model=model,
+)
+# 后续适配器创建使用解析后的模型与供应商。
+model = setup.model
+provider_name = setup.provider_name
+p = setup.provider_config
+spec = setup.spec
+# backend 决定走哪种实现，不必每个服务一个文件。
+backend = setup.backend
+# 按该供应商的代理设置解析实际网络代理。
+proxy = config.network.resolve_proxy(p.use_proxy) if p else None
 ```
 
 **关键点解读：**“供应商”是配置与路由概念，“适配器”是实现。兼容 OpenAI 协议的多个服务可能共享适配器，因此不需要每出现一个服务就寻找同名 Python 文件。

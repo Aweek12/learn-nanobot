@@ -1,6 +1,6 @@
 # 05 - MCP协议与当前集成
 
-> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。真实源码、API 签名、伪代码与配置示例分别标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
+> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。核心源码使用中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
 
 保留原协议概念与JSON报文教学示意；报文不是当前运行时源码或完整SDK实现，字段/错误码须按具体协商协议理解。项目集成、配置、包装器和练习按当前代码替换，不沿用旧版本年表。
 
@@ -557,14 +557,20 @@ MCPProvider 由应用组装处拥有，创建/连接后与 AgentLoop 共享 Tool
 
 MCPToolWrapper、MCPResourceWrapper、MCPPromptWrapper 将不同能力适配成本地Tool。协议解析和连接失败有专门路径，不应以手写几十行JSON循环冒充完整MCP握手。
 
-源码：[nanobot/agent/tools/mcp.py:1425](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L1425)。
+源码：[nanobot/agent/tools/mcp.py:1451](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L1451)
 
-流程伪代码：
-
-```text
-应用组装 MCPProvider → connect() 建立连接并发现工具
-    → 工具注册后供 Runner 使用
-应用退出 → aclose() 关闭受管理的连接
+```python
+# 只选择已配置、当前缺失且不在等待授权的服务。
+missing_servers = {
+    name: cfg
+    for name, cfg in configured_missing.items()
+    if name not in authorization_pending
+}
+# 没有需要连接的服务时提前返回。
+if not missing_servers:
+    return
+# 先发布 connecting 状态，实际连接在后续代码执行。
+self._set_runtime_status(missing_servers, "connecting")
 ```
 
 **关键点解读：**
@@ -574,6 +580,7 @@ MCPToolWrapper、MCPResourceWrapper、MCPPromptWrapper 将不同能力适配成�
 源码：[nanobot/agent/tools/mcp.py:743](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py#L743)，`MCPToolWrapper.execute`。
 
 ```python
+# MCP 工具通过受管理的会话和恢复入口发送请求。
 result = await self._request_with_recovery(
     lambda session: session.call_tool(self._original_name, arguments=kwargs),
     self._tool_timeout,

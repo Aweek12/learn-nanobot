@@ -1,6 +1,6 @@
 # 09 - 多平台接入与共享客户端
 
-> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。真实源码、API 签名、伪代码与配置示例分别标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
+> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。核心源码使用中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
 
 将旧平台伪实现、JSONL检查方式和固定出站节流策略改成当前消息契约、渠道包与交付所有权。
 
@@ -25,31 +25,47 @@ WebUI、TUI、聊天平台通过适配器进入同一Python运行时。渠道负
 
 ## 9.2 消息的真实结构
 
-源码：[nanobot/bus/events.py:26](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/events.py#L26)，`InboundMessage`。
+源码：[nanobot/bus/events.py:30](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/events.py#L30)
 
-流程伪代码：
-
-```text
-平台事件
-    → InboundMessage(channel, sender_id, chat_id, content, ...)
-    → session_key_override 或默认 channel:chat_id
-    → MessageBus → 会话协调与执行
+```python
+# 渠道名称与发送者、聊天地址分别保存。
+channel: str
+sender_id: str
+chat_id: str
+# 正文属性叫 content，不能继续沿用旧示例的 text。
+content: str
+timestamp: datetime = field(default_factory=datetime.now)
+media: list[str] = field(default_factory=list)  # Media paths or URLs
+# 平台上下文进入 metadata；可信内部控制必须由入口约束。
+metadata: dict[str, Any] = field(default_factory=dict)
+# 话题等范围可以通过可信 override 指定会话键。
+session_key_override: str | None = None  # Optional override for thread-scoped sessions
+require_existing_session: bool = False
+input_role: Literal["user", "system"] | None = None
 ```
 
 **关键点解读：**
 
 `sender_id` 标识发送者，`chat_id` 标识对话地址，两者不能互换。正文属性叫 `content`。会话键决定输入进入哪个会话，可信的 override 可表达话题等额外范围；元数据则携带平台上下文，不能随意赋予外部输入内部控制权限。
 
-源码：[nanobot/bus/events.py:55](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/events.py#L55)，`OutboundMessage`。
+源码：[nanobot/bus/events.py:64](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/events.py#L64)
 
-流程伪代码：
-
-```text
-回复内容 + channel/chat_id → OutboundMessage
-    metadata：平台回复、线程等路由信息
-    event：内部事件语义
-    delivery：交付请求及关联标识
-渠道适配器 → 平台发送
+```python
+# 发送目标由渠道与聊天地址共同确定。
+channel: str
+chat_id: str
+# content 是待交付正文。
+content: str
+reply_to: str | None = None
+media: list[str] = field(default_factory=list)
+metadata: dict[str, Any] = field(default_factory=dict)
+# 按钮、事件和交付控制是不同层次的信息。
+buttons: list[list[str]] = field(default_factory=list)
+# event 表达内部事件语义，不是任意平台字段。
+event: "AgentEvent | None" = None
+# 交付请求与标识用于关联发送过程。
+delivery: DeliveryRequest | None = None
+delivery_id: str | None = None
 ```
 
 **关键点解读：**
@@ -68,6 +84,7 @@ WebUI、TUI、聊天平台通过适配器进入同一Python运行时。渠道负
 ```python
 async def publish_inbound(self, msg: InboundMessage) -> None:
     """Publish a message from a channel to the agent."""
+    # 入队前检查当前是否允许接纳输入。
     self.admission.check()
     # This queue is unbounded. Admission and enqueue must not yield apart.
     self.inbound.put_nowait(msg)
@@ -78,6 +95,7 @@ async def publish_inbound(self, msg: InboundMessage) -> None:
 源码：[nanobot/bus/queue.py:54](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/queue.py#L54)，`MessageBus.publish_event`。
 
 ```python
+# 将事件转成出站消息后复用统一交付队列。
 await self.publish_outbound(outbound_message_for_event(
     channel=channel, chat_id=chat_id, event=event, metadata=metadata,
 ))
@@ -94,30 +112,49 @@ publish用于本地订阅等待；publish_event排队渠道交付。ChannelManag
 
 ## 9.4 渠道契约与包发现
 
-源码：[nanobot/channels/base.py:87](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/base.py#L87)，`BaseChannel.start`。
+源码：[nanobot/channels/base.py:87](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/base.py#L87)
 
-流程伪代码：
+```python
+# 抽象方法声明渠道实现必须提供长期监听入口。
+@abstractmethod
+async def start(self) -> None:
+    """
+    Start the channel and begin listening for messages.
 
-```text
-start():
-    连接平台
-    持续监听输入
-    将输入经渠道处理入口转给消息总线
+    This should be a long-running async task that:
+    1. Connects to the chat platform
+    2. Listens for incoming messages
+    3. Forwards messages to the bus via _handle_message()
+    """
+    # 基类不直接连接平台，具体实现在渠道包内。
+    pass
 ```
 
 **关键点解读：**
 
 这是基类要求具体渠道实现的长期任务，不是每来一条消息就重新登录平台。启动负责建立接收路径；Agent 如何推理和执行工具仍在共享后端。
 
-源码：[nanobot/channels/base.py:104](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/base.py#L104)，`BaseChannel.send`。
+源码：[nanobot/channels/base.py:104](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/base.py#L104)
 
-流程伪代码：
+```python
+# 渠道发送契约由具体适配器实现。
+@abstractmethod
+async def send(self, msg: OutboundMessage) -> None:
+    """
+    Send a message through this channel.
 
-```text
-send(outbound_message):
-    按平台格式发送
-    正常返回：适配器本次发送已完成
-    失败：抛出对应异常，由渠道管理器统一应用重试策略
+    Args:
+        msg: The message to send.
+
+    Implementations should raise on delivery failure so the channel manager
+    can apply any retry policy in one place.
+    Raise ChannelNotReadyError only before submitting any part of a message.
+    Raise DeliveryRejectedError for a rejected destination or policy.
+    Other exceptions have an unknown delivery outcome for scheduled results.
+    A normal return confirms this adapter completed, not a recipient read receipt.
+    """
+    # 成功返回不等于用户已读，失败需由实现抛出异常。
+    pass
 ```
 
 **关键点解读：**
@@ -136,8 +173,10 @@ send(outbound_message):
 ```python
 def session_key_for_channel(channel: str, chat_id: str, *, unified_session: bool = False) -> str:
     """Return the session key for a channel/chat pair."""
+    # 统一会话模式使用公共会话键。
     if unified_session:
         return UNIFIED_SESSION_KEY
+    # 默认将渠道和聊天地址共同作为会话范围。
     return f"{channel}:{chat_id}"
 ```
 

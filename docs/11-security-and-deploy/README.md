@@ -1,6 +1,6 @@
 # 11 - 安全与部署
 
-> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。真实源码、API 签名、伪代码与配置示例分别标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
+> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。核心源码使用中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
 
 部署命令与安全说明按本地实现核对；不再把正则黑名单、cwd或Prompt误称完备沙箱。未实际部署的内容仍为操作说明。
 
@@ -34,6 +34,7 @@ def is_path_within(path: str | Path, root: str | Path) -> bool:
     try:
         resolved_path = Path(path).expanduser().resolve(strict=False)
         resolved_root = Path(root).expanduser().resolve(strict=False)
+        # 按真实路径层级判断包含关系，不使用字符串前缀。
         resolved_path.relative_to(resolved_root)
         return True
     except (OSError, RuntimeError, TypeError, ValueError):

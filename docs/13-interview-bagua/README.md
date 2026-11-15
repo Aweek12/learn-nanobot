@@ -29,7 +29,7 @@
 
 **源码依据：** [nanobot/agent/runner.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -39,7 +39,7 @@
 
 **源码依据：** [nanobot/agent/runner.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -49,7 +49,7 @@
 
 **源码依据：** [nanobot/agent/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -59,7 +59,7 @@
 
 **源码依据：** [nanobot/agent/memory.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -77,7 +77,7 @@
 
 **源码依据：** [nanobot/agent/skills.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skills.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -111,7 +111,7 @@
 
 **源码依据：** [nanobot/agent/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -121,7 +121,7 @@
 
 **源码依据：** [nanobot/session/state.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/state.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -167,7 +167,7 @@
 
 **源码依据：** [docs/concepts.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/concepts.md)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -177,7 +177,7 @@
 
 **源码依据：** [nanobot/agent/loop.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -187,7 +187,7 @@
 
 **源码依据：** [nanobot/agent/context.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -197,7 +197,7 @@
 
 **源码依据：** [nanobot/agent/context_governance.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context_governance.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -207,7 +207,7 @@
 
 **源码依据：** [nanobot/agent/tools/registry.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -217,7 +217,7 @@
 
 **源码依据：** [nanobot/agent/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -227,7 +227,7 @@
 
 **源码依据：** [nanobot/bus/queue.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/bus/queue.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -237,7 +237,7 @@
 
 **源码依据：** [nanobot/agent/skills.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skills.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -247,7 +247,7 @@
 
 **源码依据：** [nanobot/agent/tools/mcp.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -257,7 +257,7 @@
 
 **源码依据：** [nanobot/config/schema.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/config/schema.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -267,7 +267,7 @@
 
 **源码依据：** [nanobot/agent/loop.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -277,7 +277,7 @@
 
 **源码依据：** [nanobot/agent/loop.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -287,7 +287,7 @@
 
 **源码依据：** [nanobot/agent/memory.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -297,7 +297,7 @@
 
 **源码依据：** [nanobot/channels/base.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/base.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -307,7 +307,7 @@
 
 **源码依据：** [nanobot/config/loader.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/config/loader.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -317,7 +317,7 @@
 
 **源码依据：** [nanobot/agent/context.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -327,7 +327,7 @@
 
 **源码依据：** [docs/architecture.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/architecture.md)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -337,7 +337,7 @@
 
 **源码依据：** [docs/architecture.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/architecture.md)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -347,7 +347,7 @@
 
 **源码依据：** [docs/architecture.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/architecture.md)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -357,7 +357,7 @@
 
 **源码依据：** [docs/architecture.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/architecture.md)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -377,7 +377,7 @@
 
 **源码依据：** [nanobot/agent/tools/mcp.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -414,7 +414,7 @@
 
 **源码依据：** [nanobot/agent/tools/mcp.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -432,7 +432,7 @@
 
 **源码依据：** [nanobot/config/schema.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/config/schema.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -548,7 +548,7 @@
 
 **源码依据：** [nanobot/agent/context_governance.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context_governance.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -617,7 +617,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/providers/base.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/providers/base.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -819,7 +819,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/runner.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -829,7 +829,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/context_governance.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context_governance.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -839,7 +839,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/tools/mcp.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/mcp.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -849,7 +849,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/loop.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/loop.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -859,7 +859,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/context.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -869,7 +869,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/skills.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skills.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -879,7 +879,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -889,7 +889,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/channels/manager.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/channels/manager.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -899,7 +899,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/context_governance.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/context_governance.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -909,7 +909,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/providers/factory.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/providers/factory.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -919,7 +919,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/memory.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/memory.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -929,7 +929,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/session/keys.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/keys.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -939,7 +939,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/tools/shell.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/shell.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -949,7 +949,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/session/state.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/state.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -959,7 +959,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [docs/webui.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/webui.md)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -1065,7 +1065,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/tools/execution.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/execution.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -1075,7 +1075,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/agent/subagent.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/subagent.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -1253,7 +1253,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [tests/agent/test_runner_core.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/tests/agent/test_runner_core.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -1271,7 +1271,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 **源码依据：** [nanobot/session/recovery.py](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/session/recovery.py)。
 
-**追问方法：** 指出实际调用者、状态所有者与可验证边界，不把教学伪代码当作原始实现。
+**追问方法：** 结合源码说明实际调用者、状态所有者和执行结果。
 
 ---
 
@@ -1287,7 +1287,7 @@ MoE 的核心优势是「用更少的计算获得更强的模型能力」，但�
 
 ### Q134. 怎样维护可核对的源码教程？
 
-**当前版本回答：** 固定提交、区分原文/签名/伪代码、标注状态与调用边界，检查链接、配置与代码语法，并同步问答。原目录仍为17章；未运行的业务或服务不写验证成功。
+**当前版本回答：** 固定提交、区分原文/签名/流程说明、标注状态与调用边界，检查链接、配置与代码语法，并同步问答。原目录仍为17章；未运行的业务或服务不写验证成功。
 
 **源码依据：** [docs/architecture.md](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/docs/architecture.md)。
 

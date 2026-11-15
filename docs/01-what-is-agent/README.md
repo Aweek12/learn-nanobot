@@ -254,15 +254,28 @@ Final Answer: "Apple (AAPL) 当前股价 $245.32。
 
 Nanobot 的 `AgentRunner` 本质上实现了 ReAct 循环：
 
-**伪代码**：只表达流程，操作名不是可直接调用的 nanobot API。
+下面截取 Runner 中准备上下文和请求模型的真实语句，用 # 注释说明每一步。
 
-```text
-构造本次上下文与工具定义
-按当前预算与继续策略循环：
-  请求模型
-  需要工具时执行有效调用并回传结果
-  否则处理最终回答或失败/恢复路径
-返回结果并收尾
+源码：[nanobot/agent/runner.py:494](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/runner.py#L494)
+
+```python
+# 每次模型迭代前通知 Hook。
+await hook.before_iteration(context)
+request_message_count = len(messages)
+# 准备模型这次真正收到的上下文。
+request_messages = await self.prepare_prompt(
+    request_state.compaction.request_messages, messages,
+)
+request_state.recent_round_usages.append(None)
+# 调用模型，拿到响应和本次用量。
+response, raw_usage = await self._request_model(
+    spec,
+    request_messages,
+    hook,
+    context,
+    request_state=request_state,
+    transcript=messages,
+)
 ```
 
 ### ReAct vs 其他范式对比

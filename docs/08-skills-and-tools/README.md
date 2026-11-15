@@ -1,6 +1,6 @@
 # 08 - 技能与工具
 
-> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。真实源码、API 签名、伪代码与配置示例分别标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
+> 已按本地 nanobot `0.4.1`、提交 `27f1a836b5c04a30763dd91960059f81c05bf505` 核对。核心源码使用中文 # 注释解读，配置示例单独标注。详见 [版本核对记录](../LOCAL_SOURCE_BASELINE.md)。
 
 保留Skill概念与独立学习示例，工具参数、注册、来源覆盖、MCP和安全机制以当前源码为准。静态清单不代表所有工具默认启用。
 
@@ -85,6 +85,7 @@ metadata采用nanobot嵌套requires结构，不是nanobot.requires.bins字面键
 ```python
 def valid_skill_metadata(metadata: dict[str, object], name: str) -> bool:
     """Return whether metadata satisfies the Agent Skills identity contract."""
+    # 先取描述，再核对技能身份、格式与长度约束。
     description = metadata.get("description")
     return (
         metadata.get("name") == name
@@ -106,16 +107,22 @@ SkillsLoader发现工作区skills，再加入启用插件技能，最后补内�
 
 ContextBuilder加载always技能内容与其他技能摘要；显式$技能入口也有上下文逻辑。不是所有Skill每轮始终全文注入。
 
-源码：[nanobot/agent/skills.py:121](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skills.py#L121)，`SkillsLoader._discover_skills`。
+源码：[nanobot/agent/skills.py:147](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/skills.py#L147)
 
-流程伪代码：
+```python
+# 内置技能最后补入，前面已登记的同名项不会被覆盖。
+if self.builtin_skills and self.builtin_skills.exists():
+    skills.extend(
+        # seen_names 保留工作区与插件的来源优先级。
+        self._skill_entries_from_dir(self.builtin_skills, "builtin", skip_names=seen_names)
+    )
 
-```text
-读取 workspace 技能，记录 seen_names
-加入未被同名覆盖的已启用插件技能
-加入仍未被同名覆盖的内置技能
-按 disabled 列表及别名关系过滤
-返回本次发现结果
+# 用户禁用列表最终过滤发现结果。
+if disabled:
+    skills = [s for s in skills if s["name"] not in disabled]
+
+# 返回发现清单；依赖与加载条件还需沿调用方理解。
+return skills
 ```
 
 **关键点解读：**
@@ -165,23 +172,27 @@ ContextBuilder加载always技能内容与其他技能摘要；显式$技能入�
 ```python
 def register(self, tool: Tool) -> None:
     """Register a tool."""
+    # 按工具名称登记实例；注册不等于执行。
     self._tools[tool.name] = tool
+    # 注册表变化后让模型工具定义缓存失效。
     self._cached_definitions = None
 ```
 
 **关键点解读：**`tool.name` 是索引键，值是实例；注册后清空定义缓存，使下次导出工具定义时反映当前注册表。它没有直接执行工具，正好体现发现、注册与执行的区别。
 
-源码：[nanobot/agent/tools/registry.py:120](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L120)，`ToolRegistry.prepare_call`。
+源码：[nanobot/agent/tools/registry.py:151](https://github.com/HKUDS/nanobot/blob/27f1a836b5c04a30763dd91960059f81c05bf505/nanobot/agent/tools/registry.py#L151)
 
-流程伪代码：
-
-```text
-prepare_call(name, params):
-    按 name 查找工具；不存在则返回错误和可能的名称提示
-    准备工具请求上下文
-    规范化 params，并要求参数是对象
-    根据工具 Schema 转换类型、校验参数
-    返回 (tool, cast_params, error)
+```python
+# 按 Schema 转换参数后进行值与结构校验。
+cast_params = tool.cast_params(cast(dict[str, Any], params))
+errors = tool.validate_params(cast_params)
+# 校验不通过就返回错误，不能直接执行。
+if errors:
+    return tool, cast_params, (
+        ToolResult.error(f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors))
+    )
+# 成功时返回工具、转换后参数以及空错误。
+return tool, cast_params, None
 ```
 
 **关键点解读：**
